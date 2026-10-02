@@ -16,10 +16,6 @@
 
     .box { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 10px; }
 
-    
-
-    /* ส่วนจัดวางวิดีโอและตัวอักษรซ้อนทับ */
-
     .video-container { position: relative; width: 100%; background: #000; border-radius: 6px; overflow: hidden; }
 
     video { width: 100%; display: block; max-height: 400px; }
@@ -52,7 +48,6 @@
 
     .overlay-info span { color: #4ade80; font-weight: bold; }
 
-
     input { width: 100%; padding: 14px; font-size: 18px; box-sizing: border-box; margin-top: 5px; border: 2px solid #cbd5e1; border-radius: 6px; }
 
     input:focus { border-color: #2563eb; outline: none; }
@@ -79,8 +74,6 @@
   <div id="status">กรุณากดปุ่ม "เปิดกล้อง" ด้านบนก่อนเริ่มใช้งาน</div>
 
 
-  <!-- วิดีโอพร้อมข้อความซ้อนทับตามที่คุณต้องการ -->
-
   <div class="video-container">
 
     <div class="overlay-info">
@@ -100,9 +93,9 @@
 
   <div class="box" style="margin-top:10px;">
 
-    <label for="scan"><strong>คลิกช่องนี้ แล้วยิง QR / บาร์โค้ดพัสดุ (เช่น MYOC...):</strong></label>
+    <label for="scan"><strong>คลิกช่องนี้ แล้วยิง QR / บาร์โค้ดพัสดุ:</strong></label>
 
-    <input id="scan" placeholder="สแกนครั้งที่ 1 เพื่อเริ่มอัด | สแกนเลขเดิมซ้ำเพื่อปิดงาน..." autocomplete="off" disabled>
+    <input id="scan" placeholder="ยิงสแกนรอบที่ 1 เพื่อเริ่มอัด | ยิงสแกนรอบที่ 2 (เลขเดิม) เพื่อปิดงาน..." autocomplete="off" disabled>
 
   </div>
 
@@ -116,7 +109,7 @@
     const token = params.get('token');
 
 
-    let stream = null, recorder = null, chunks = [], phase = 'idle', currentOrder = null, timerInterval = null;
+    let stream = null, recorder = null, chunks = [], phase = 'idle', currentOrder = null, timerInterval = null, scanTimer = null;
 
     const $ = id => document.getElementById(id);
 
@@ -135,7 +128,7 @@
 
         $('scan').focus();
 
-        $('status').textContent = 'กล้องพร้อมแล้ว! สแกนบาร์โค้ด/QR พัสดุเพื่อเริ่มบันทึก';
+        $('status').textContent = 'กล้องพร้อมแล้ว! ยิงสแกนบาร์โค้ดพัสดุเพื่อเริ่มบันทึกทันที';
 
         $('camBtn').style.display = 'none';
 
@@ -148,8 +141,6 @@
     };
 
 
-    // อัปเดตเวลาบนจอแบบเรียลไทม์
-
     function updateClock() {
 
       const now = new Date();
@@ -161,34 +152,44 @@
     }
 
 
-    // ฟังก์ชันดักจับการยิงบาร์โค้ด (รองรับทุกตัวอักษร รวม MYOC...)
+    // ดักจับข้อมูลที่ยิงเข้ามาจนจบชุดอัตโนมัติ (ไม่ต้องกด Enter)
 
     $('scan').oninput = (e) => {
 
+      clearTimeout(scanTimer);
+
       const val = $('scan').value.trim();
 
-      if (val.length < 4) return; // รอให้บาร์โค้ดถูกยิงเข้ามาจนครบชุด
+      
 
-      $('scan').value = '';
+      // หน่วงเวลาสั้นๆ 150 มิลลิวินาที เพื่อรอให้เครื่องสแกนยิงตัวอักษรจนครบชุดเสร็จสมบูรณ์
+
+      scanTimer = setTimeout(() => {
+
+        if (val.length < 5) return; // ถ้ารหัสสั้นเกินไปให้ข้าม
+
+        $('scan').value = '';
 
 
-      if (phase === 'idle') {
+        if (phase === 'idle') {
 
-        startRecord(val);
+          startRecord(val);
 
-      } else if (phase === 'recording') {
+        } else if (phase === 'recording') {
 
-        if (val === currentOrder) {
+          if (val === currentOrder) {
 
-          stopRecord();
+            stopRecord();
 
-        } else {
+          } else {
 
-          alert('กำลังบันทึกพัสดุ ' + currentOrder + ' อยู่! กรุณาสแกนเลขเดิมซ้ำเพื่อปิดงาน');
+            alert('กำลังบันทึกพัสดุ ' + currentOrder + ' อยู่! กรุณาสแกนเลขเดิมซ้ำเพื่อปิดงาน');
+
+          }
 
         }
 
-      }
+      }, 150);
 
     };
 
@@ -220,7 +221,7 @@
 
       $('ovOrder').textContent = order;
 
-      $('status').textContent = '🔴 กำลังบันทึกวิดีโอ... (สแกนเลขเดิมซ้ำอีกครั้งเพื่อปิดงาน)';
+      $('status').textContent = '🔴 กำลังบันทึกวิดีโอ... (สแกนเลขเดิมอีกรอบเพื่อปิดงาน)';
 
     }
 
