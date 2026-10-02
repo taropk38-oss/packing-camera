@@ -1,353 +1,192 @@
 <!DOCTYPE html>
-
 <html lang="th">
-
 <head>
-
   <meta charset="UTF-8">
-
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
   <title>Packing Camera Scanner</title>
-
   <style>
-
     body { font-family: sans-serif; max-width: 900px; margin: 10px auto; padding: 10px; background: #f8fafc; }
-
     .box { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 10px; }
-
     .video-container { position: relative; width: 100%; background: #000; border-radius: 6px; overflow: hidden; }
-
     video { width: 100%; display: block; max-height: 400px; }
-
     .overlay-info {
-
       position: absolute; top: 10px; left: 10px; background: rgba(0, 0, 0, 0.75);
-
       color: #fff; padding: 10px 15px; border-radius: 6px; font-size: 16px; line-height: 1.6; font-family: monospace;
-
     }
-
     .overlay-info span { color: #4ade80; font-weight: bold; }
-
     input { width: 100%; padding: 14px; font-size: 18px; box-sizing: border-box; margin-top: 5px; border: 2px solid #cbd5e1; border-radius: 6px; }
-
     input:focus { border-color: #2563eb; outline: none; }
-
     #status { padding: 10px; background: #eff6ff; border-left: 4px solid #2563eb; margin-bottom: 10px; font-weight: bold; }
-
     button { padding: 12px 24px; font-size: 16px; background: #16a34a; color: white; border: none; border-radius: 5px; cursor: pointer; }
-
   </style>
-
 </head>
-
 <body>
-
   <div class="box" style="display:flex; justify-content:space-between; align-items:center;">
-
     <h3 style="margin:0;">กล้องบันทึกการแพ็กสินค้า</h3>
-
     <button id="camBtn" type="button">เปิดกล้อง</button>
-
   </div>
-
 
   <div id="status">กรุณากดปุ่ม "เปิดกล้อง" ด้านบนเพื่อเริ่มใช้งาน</div>
 
-
   <div class="video-container">
-
     <div class="overlay-info">
-
       พัสดุ: <span id="ovOrder">-</span><br>
-
       วันที่: <span id="ovDate">-</span><br>
-
       เวลา: <span id="ovTime">-</span>
-
     </div>
-
     <video id="preview" autoplay playsinline muted></video>
-
   </div>
-
 
   <div class="box" style="margin-top:10px;">
-
     <label for="scan"><strong>คลิกช่องนี้ แล้วยิง QR / บาร์โค้ดพัสดุ:</strong></label>
-
     <input id="scan" placeholder="ยิงสแกนรอบที่ 1 เพื่อเริ่มอัด | ยิงสแกนรอบที่ 2 (เลขเดิม) เพื่อปิดงาน..." autocomplete="off" disabled>
-
   </div>
 
-
   <script>
-
     const params = new URLSearchParams(location.hash.slice(1));
-
     const parentOrigin = params.get('parentOrigin');
-
     const token = params.get('token');
 
-
     let stream = null, recorder = null, chunks = [], phase = 'idle', currentOrder = null, timerInterval = null;
-
     const $ = id => document.getElementById(id);
 
-
     document.getElementById('camBtn').addEventListener('click', async () => {
-
       try {
-
         $('status').textContent = 'กำลังเปิดกล้อง...';
-
         stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false });
-
         $('preview').srcObject = stream;
-
         await $('preview').play();
-
         $('scan').disabled = false;
-
         $('scan').focus();
-
         $('status').textContent = 'กล้องพร้อมแล้ว! ยิงสแกนบาร์โค้ดได้เลย';
-
         $('camBtn').style.display = 'none';
-
       } catch (e) {
-
         alert('เปิดกล้องไม่ได้: ' + e.message);
-
       }
-
     });
-
 
     function updateClock() {
-
       const now = new Date();
-
       $('ovDate').textContent = now.toLocaleDateString('th-TH');
-
       $('ovTime').textContent = now.toLocaleTimeString('th-TH');
-
     }
 
-
-    // แม็ปแปลงภาษาไทยเป็นอังกฤษแบบสมบูรณ์
-
+    // แปลงตัวอักษรไทยที่หลุดมาเป็นอังกฤษแบบเบ็ดเสร็จ
     const mapTH = {
-
       'ๅ':'1','ภ':'2','ถ':'3','ุ':'4','ึ':'5','ค':'6','ต':'7','จ':'8','ข':'9','ช':'0',
-
       'ๆ':'q','พ':'w','ะ':'e','ั':'r','ี':'t','ร':'y','น':'u','ย':'i','บ':'o','ล':'p',
-
       'ฟ':'a','ห':'s','ก':'d','ด':'f','เ':'g','้':'h','่':'j','า':'k','ส':'l',
-
       'ผ':'z','ป':'x','แ':'c','อ':'v','ิ':'b','ื':'n','ท':'m',
-
       'ภ':'2','ถ':'3','ุ':'4','ึ':'5','ค':'6','ต':'7','จ':'8','ข':'9','ช':'0','ๅ':'1',
-
       'ๆ':'Q','พ':'W','ะ':'E','ั':'R','ี':'T','ร':'Y','น':'U','ย':'I','บ':'O','ล':'P',
-
       'ฟ':'A','ห':'S','ก':'D','ด':'F','เ':'G','้':'H','่':'J','า':'K','ส':'L',
-
       'ผ':'Z','ป':'X','แ':'C','อ':'V','ิ':'B','ื':'N','ท':'M'
-
     };
 
+    function translateText(input) {
+      return input.split('').map(char => mapTH[char] || char).join('');
+    }
 
-    $('scan').addEventListener('keydown', (e) => {
-
-      // ดักจับและแปลงค่าทันทีที่ยิงบาร์โค้ดเข้ามา ไม่สนภาษาในเครื่อง
-
-      if (mapTH[e.key]) {
-
-        e.preventDefault();
-
-        const start = $('scan').selectionStart;
-
-        const end = $('scan').selectionEnd;
-
-        const val = $('scan').value;
-
-        $('scan').value = val.substring(0, start) + mapTH[e.key] + val.substring(end);
-
-        $('scan').setSelectionRange(start + 1, start + 1);
-
+    // ใช้การจับ Event เมื่อยิงบาร์โค้ดเสร็จ (กด Enter หรือส่งข้อมูลครบก้อน)
+    $('scan').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        processScan();
       }
-
     });
 
+    $('scan').addEventListener('change', () => {
+      processScan();
+    });
 
-    $('scan').addEventListener('change', (e) => {
-
+    function processScan() {
       let rawVal = $('scan').value.trim();
-
       $('scan').value = '';
-
       if (!rawVal) return;
 
-
-      // กรองเอาเฉพาะตัวอักษรภาษาอังกฤษ ตัวเลข และขีด
-
-      let cleanOrder = rawVal.split(/[\s\t\n]+/)[0].replace(/[^a-zA-Z0-9\-_]/g, '');
-
+      // แปลงภาษาไทยเป้นอังกฤษ และตัดเอาเฉพาะข้อความหลัก
+      let translated = translateText(rawVal);
+      let cleanOrder = translated.split(/[\s\t\n]+/)[0].replace(/[^a-zA-Z0-9\-_]/g, '');
+      
       if (cleanOrder.length < 3) return;
 
-
       if (phase === 'idle') {
-
         startRecord(cleanOrder);
-
       } else if (phase === 'recording') {
-
         if (cleanOrder === currentOrder) {
-
           stopRecord();
-
         } else {
-
           alert('กำลังบันทึกพัสดุ ' + currentOrder + ' อยู่! กรุณาสแกนเลขเดิมซ้ำเพื่อปิดงาน');
-
           $('scan').focus();
-
         }
-
       }
-
-    });
-
+    }
 
     function startRecord(order) {
-
       currentOrder = order;
-
       chunks = [];
-
       updateClock();
-
       timerInterval = setInterval(updateClock, 1000);
 
-
       const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp8') ? 'video/webm;codecs=vp8' : 'video/webm';
-
       recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 250000 });
 
-
       recorder.ondataavailable = ev => { if (ev.data.size > 0) chunks.push(ev.data); };
-
       recorder.onstop = uploadRecord;
-
       recorder.start(1000);
-
       phase = 'recording';
 
-
       $('ovOrder').textContent = order;
-
       $('status').textContent = '🔴 กำลังบันทึกวิดีโออยู่... (สแกนเลขเดิมซ้ำอีกครั้งเพื่อปิดงาน)';
-
     }
-
 
     function stopRecord() {
-
       if (recorder && recorder.state !== 'inactive') {
-
         phase = 'processing';
-
         clearInterval(timerInterval);
-
         $('status').textContent = '⏳ กำลังประมวลผลและบันทึกลง Google Sheets...';
-
         recorder.stop();
-
       }
-
     }
-
 
     async function uploadRecord() {
-
       const blob = new Blob(chunks, { type: recorder.mimeType.split(';')[0] });
-
       const reader = new FileReader();
-
       
-
       reader.onloadend = () => {
-
         const base64data = reader.result.split(',')[1];
-
         const payload = {
-
           id: crypto.randomUUID(),
-
           order: currentOrder,
-
           startedAt: Date.now() - (chunks.length * 1000),
-
           endedAt: Date.now(),
-
           mime: blob.type,
-
           base64: base64data
-
         };
 
-
         google.script.run
-
           .withSuccessHandler((res) => {
-
-            $('status').textContent = '✅ บันทึกพัสดุ ' + currentOrder + ' สำเร็จเรียบร้อย!';
-
+            $('status').textContent = '✅ บันทึกพัสดุ ' + currentOrder + ' ลง Google Sheets สำเร็จเรียบร้อย!';
             resetDisplay();
-
           })
-
           .withFailureHandler(err => {
-
             $('status').textContent = '❌ บันทึกไม่สำเร็จ: ' + err.message;
-
             phase = 'idle';
-
             $('scan').focus();
-
           })
-
           .saveRecording(payload);
-
       };
-
       reader.readAsDataURL(blob);
-
     }
-
 
     function resetDisplay() {
-
       phase = 'idle';
-
       currentOrder = null;
-
       $('ovOrder').textContent = '-';
-
       $('ovDate').textContent = '-';
-
       $('ovTime').textContent = '-';
-
       clearInterval(timerInterval);
-
       $('scan').focus();
-
     }
-
   </script>
-
 </body>
-
 </html>
