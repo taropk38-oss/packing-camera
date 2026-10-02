@@ -118,7 +118,9 @@
 
       try {
 
-        stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false });
+        // ตั้งความละเอียดต่ำ (320x240) เพื่อให้ไฟล์มีขนาดเล็กที่สุด เหมาะกับการเก็บบันทึกจำนวนมาก
+
+        stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false });
 
         $('preview').srcObject = stream;
 
@@ -152,8 +154,6 @@
     }
 
 
-    // แปลงภาษาไทยที่เกิดจากการลืมเปลี่ยนภาษา กลับเป็นตัวอักษรภาษาอังกฤษอัตโนมัติ
-
     function fixKeyboardLayout(str) {
 
       const map = {
@@ -165,8 +165,6 @@
         'ฟ':'a', 'ห':'s', 'ก':'d', 'ด':'f', 'เ':'g', '้':'h', '่':'j', 'า':'k', 'ส':'l',
 
         'ผ':'z', 'ป':'x', 'แ':'c', 'อ':'v', 'ิ':'b', 'ื':'n', 'ท':'m',
-
-        'ๅ':'1', 'ภ':'2', 'ถ':'3', 'ุ':'4', 'ึ':'5', 'ค':'6', 'ต':'7', 'จ':'8', 'ข':'9', 'ช':'0',
 
         'ๆ':'Q', 'พ':'W', 'ะ':'E', 'ั':'R', 'ี':'T', 'ร':'Y', 'น':'U', 'ย':'I', 'บ':'O', 'ล':'P',
 
@@ -194,8 +192,6 @@
         if (rawVal.length < 5) return;
 
         
-
-        // แก้ภาษาไทย + ตัดเอาเฉพาะคำแรกสุด
 
         let fixedStr = fixKeyboardLayout(rawVal);
 
@@ -243,7 +239,9 @@
 
       const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp8') ? 'video/webm;codecs=vp8' : 'video/webm';
 
-      recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 1500000 });
+      // บีบอัดบิตเรตให้เหลือ 300kbps เพื่อขนาดไฟล์ที่เล็กจิ๋ว
+
+      recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 300000 });
 
 
       recorder.ondataavailable = ev => { if (ev.data.size > 0) chunks.push(ev.data); };
@@ -270,7 +268,7 @@
 
         clearInterval(timerInterval);
 
-        $('status').textContent = '⏳ กำลังประมวลผลและอัปโหลดข้อมูล...';
+        $('status').textContent = '⏳ กำลังบันทึกและส่งข้อมูลเข้า Google Sheets... (ไฟล์เล็ก อัปโหลดไว)';
 
         recorder.stop();
 
@@ -312,7 +310,7 @@
 
           .withSuccessHandler(() => {
 
-            $('status').textContent = '✅ บันทึกพัสดุ ' + currentOrder + ' สำเร็จ! พร้อมสแกนรายการต่อไป';
+            $('status').textContent = '✅ บันทึกพัสดุ ' + currentOrder + ' สำเร็จ! บันทึกลงชีตเรียบร้อย';
 
             resetDisplay();
 
