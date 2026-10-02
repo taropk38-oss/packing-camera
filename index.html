@@ -12,23 +12,54 @@
 
   <style>
 
-    body { font-family: sans-serif; max-width: 900px; margin: 20px auto; padding: 15px; background: #f8fafc; }
+    body { font-family: sans-serif; max-width: 900px; margin: 10px auto; padding: 10px; background: #f8fafc; }
 
-    .box { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 15px; }
+    .box { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 10px; }
 
-    video { width: 100%; max-height: 400px; background: #000; border-radius: 6px; }
+    
 
-    input { width: 100%; padding: 14px; font-size: 18px; box-sizing: border-box; margin-top: 8px; border: 2px solid #cbd5e1; border-radius: 6px; }
+    /* ส่วนจัดวางวิดีโอและตัวอักษรซ้อนทับ */
+
+    .video-container { position: relative; width: 100%; background: #000; border-radius: 6px; overflow: hidden; }
+
+    video { width: 100%; display: block; max-height: 400px; }
+
+    .overlay-info {
+
+      position: absolute;
+
+      top: 10px;
+
+      left: 10px;
+
+      background: rgba(0, 0, 0, 0.75);
+
+      color: #fff;
+
+      padding: 10px 15px;
+
+      border-radius: 6px;
+
+      font-size: 16px;
+
+      line-height: 1.6;
+
+      pointer-events: none;
+
+      font-family: monospace;
+
+    }
+
+    .overlay-info span { color: #4ade80; font-weight: bold; }
+
+
+    input { width: 100%; padding: 14px; font-size: 18px; box-sizing: border-box; margin-top: 5px; border: 2px solid #cbd5e1; border-radius: 6px; }
 
     input:focus { border-color: #2563eb; outline: none; }
 
-    .info { font-size: 20px; margin: 8px 0; }
+    #status { padding: 10px; background: #eff6ff; border-left: 4px solid #2563eb; margin-bottom: 10px; font-weight: bold; }
 
-    .highlight { color: #2563eb; font-weight: bold; }
-
-    #status { padding: 12px; background: #eff6ff; border-left: 4px solid #2563eb; margin-bottom: 15px; font-size: 16px; font-weight: bold; }
-
-    button { padding: 12px 20px; font-size: 16px; background: #16a34a; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    button { padding: 10px 20px; font-size: 16px; background: #16a34a; color: white; border: none; border-radius: 5px; cursor: pointer; }
 
   </style>
 
@@ -38,7 +69,7 @@
 
   <div class="box" style="display:flex; justify-content:space-between; align-items:center;">
 
-    <h2 style="margin:0;">กล้องบันทึกการแพ็กสินค้า</h2>
+    <h3 style="margin:0;">กล้องบันทึกการแพ็กสินค้า</h3>
 
     <button id="camBtn">เปิดกล้อง</button>
 
@@ -48,27 +79,30 @@
   <div id="status">กรุณากดปุ่ม "เปิดกล้อง" ด้านบนก่อนเริ่มใช้งาน</div>
 
 
-  <!-- ส่วนแสดงผลเลขพัสดุ วันที่ และเวลา ตามที่ต้องการ -->
+  <!-- วิดีโอพร้อมข้อความซ้อนทับตามที่คุณต้องการ -->
 
-  <div class="box">
+  <div class="video-container">
 
-    <div class="info">เลขพัสดุ: <span id="lblOrder" class="highlight">-</span></div>
+    <div class="overlay-info">
 
-    <div class="info">วันที่เริ่ม: <span id="lblDate" class="highlight">-</span></div>
+      พัสดุ: <span id="ovOrder">-</span><br>
 
-    <div class="info">เวลาเริ่ม: <span id="lblTime" class="highlight">-</span></div>
+      วันที่: <span id="ovDate">-</span><br>
+
+      เวลา: <span id="ovTime">-</span>
+
+    </div>
+
+    <video id="preview" autoplay playsinline muted></video>
 
   </div>
 
 
-  <video id="preview" autoplay playsinline muted></video>
+  <div class="box" style="margin-top:10px;">
 
+    <label for="scan"><strong>คลิกช่องนี้ แล้วยิง QR / บาร์โค้ดพัสดุ (เช่น MYOC...):</strong></label>
 
-  <div class="box">
-
-    <label for="scan"><strong>คลิกช่องนี้ แล้วสแกน QR / บาร์โค้ดพัสดุ:</strong></label>
-
-    <input id="scan" placeholder="สแกนครั้งที่ 1 เพื่อเริ่มบันทึก | สแกนเลขเดิมซ้ำเพื่อปิดงาน..." autocomplete="off" disabled>
+    <input id="scan" placeholder="สแกนครั้งที่ 1 เพื่อเริ่มอัด | สแกนเลขเดิมซ้ำเพื่อปิดงาน..." autocomplete="off" disabled>
 
   </div>
 
@@ -82,7 +116,7 @@
     const token = params.get('token');
 
 
-    let stream = null, recorder = null, chunks = [], phase = 'idle', currentOrder = null, startTime = null;
+    let stream = null, recorder = null, chunks = [], phase = 'idle', currentOrder = null, timerInterval = null;
 
     const $ = id => document.getElementById(id);
 
@@ -101,7 +135,7 @@
 
         $('scan').focus();
 
-        $('status').textContent = 'กล้องพร้อมแล้ว! สแกน QR Code พัสดุเพื่อเริ่มบันทึก';
+        $('status').textContent = 'กล้องพร้อมแล้ว! สแกนบาร์โค้ด/QR พัสดุเพื่อเริ่มบันทึก';
 
         $('camBtn').style.display = 'none';
 
@@ -114,11 +148,26 @@
     };
 
 
+    // อัปเดตเวลาบนจอแบบเรียลไทม์
+
+    function updateClock() {
+
+      const now = new Date();
+
+      $('ovDate').textContent = now.toLocaleDateString('th-TH');
+
+      $('ovTime').textContent = now.toLocaleTimeString('th-TH');
+
+    }
+
+
+    // ฟังก์ชันดักจับการยิงบาร์โค้ด (รองรับทุกตัวอักษร รวม MYOC...)
+
     $('scan').oninput = (e) => {
 
       const val = $('scan').value.trim();
 
-      if (val.length < 3) return;
+      if (val.length < 4) return; // รอให้บาร์โค้ดถูกยิงเข้ามาจนครบชุด
 
       $('scan').value = '';
 
@@ -135,7 +184,7 @@
 
         } else {
 
-          alert('กำลังบันทึกพัสดุ ' + currentOrder + ' อยู่! กรุณาสแกนเลขเดิมอีกครั้งเพื่อปิดงาน');
+          alert('กำลังบันทึกพัสดุ ' + currentOrder + ' อยู่! กรุณาสแกนเลขเดิมซ้ำเพื่อปิดงาน');
 
         }
 
@@ -148,14 +197,16 @@
 
       currentOrder = order;
 
-      startTime = new Date();
-
       chunks = [];
+
+      updateClock();
+
+      timerInterval = setInterval(updateClock, 1000);
 
 
       const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp8') ? 'video/webm;codecs=vp8' : 'video/webm';
 
-      recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 1000000 });
+      recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 1500000 });
 
 
       recorder.ondataavailable = ev => { if (ev.data.size > 0) chunks.push(ev.data); };
@@ -167,15 +218,9 @@
       phase = 'recording';
 
 
-      // แสดงข้อมูลบนหน้าจอทันทีตามที่ต้องการ
+      $('ovOrder').textContent = order;
 
-      $('lblOrder').textContent = order;
-
-      $('lblDate').textContent = startTime.toLocaleDateString('th-TH');
-
-      $('lblTime').textContent = startTime.toLocaleTimeString('th-TH');
-
-      $('status').textContent = '🔴 กำลังบันทึกวิดีโอ... (สแกนเลขเดิมซ้ำอีกครั้งเพื่อจบงาน)';
+      $('status').textContent = '🔴 กำลังบันทึกวิดีโอ... (สแกนเลขเดิมซ้ำอีกครั้งเพื่อปิดงาน)';
 
     }
 
@@ -186,7 +231,9 @@
 
         phase = 'processing';
 
-        $('status').textContent = '⏳ กำลังประมวลผลและอัปโหลดวิดีโอลงระบบ...';
+        clearInterval(timerInterval);
+
+        $('status').textContent = '⏳ กำลังประมวลผลและอัปโหลดข้อมูล...';
 
         recorder.stop();
 
@@ -213,7 +260,7 @@
 
           order: currentOrder,
 
-          startedAt: startTime.getTime(),
+          startedAt: Date.now() - (chunks.length * 1000),
 
           endedAt: Date.now(),
 
@@ -265,11 +312,13 @@
 
       currentOrder = null;
 
-      $('lblOrder').textContent = '-';
+      $('ovOrder').textContent = '-';
 
-      $('lblDate').textContent = '-';
+      $('ovDate').textContent = '-';
 
-      $('lblTime').textContent = '-';
+      $('ovTime').textContent = '-';
+
+      clearInterval(timerInterval);
 
       $('scan').focus();
 
