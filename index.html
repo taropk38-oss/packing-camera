@@ -118,8 +118,6 @@
 
       try {
 
-        // ตั้งความละเอียดต่ำ (320x240) เพื่อให้ไฟล์มีขนาดเล็กที่สุด เหมาะกับการเก็บบันทึกจำนวนมาก
-
         stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false });
 
         $('preview').srcObject = stream;
@@ -128,7 +126,7 @@
 
         $('scan').disabled = false;
 
-        $('scan').focus();
+        $('scan'].focus();
 
         $('status').textContent = 'กล้องพร้อมแล้ว! ยิงสแกนบาร์โค้ดพัสดุเพื่อเริ่มบันทึกทันที';
 
@@ -195,12 +193,20 @@
 
         let fixedStr = fixKeyboardLayout(rawVal);
 
-        let cleanOrder = fixedStr.split(/[\s\t\n]+/)[0].replace(/[^a-zA-Z0-9]/g, '');
+        let cleanOrder = fixedStr.split(/[\s\t\n]+/)[0].trim();
 
         $('scan').value = '';
 
 
-        if (!cleanOrder || cleanOrder.length < 5) return;
+        // กรองให้รับเฉพาะรหัสพัสดุที่ถูกต้อง (มีความยาวตั้งแต่ 8 ตัวขึ้นไป และมีทั้งตัวอักษรกับตัวเลขผสมกัน เช่น MYOC...)
+
+        if (cleanOrder.length < 8 || !/[a-zA-Z]/.test(cleanOrder)) {
+
+          alert('รหัสพัสดุไม่ถูกต้อง (' + cleanOrder + ') กรุณายิงบาร์โค้ดพัสดุให้ถูกต้องครับ');
+
+          return;
+
+        }
 
 
         if (phase === 'idle') {
@@ -239,9 +245,7 @@
 
       const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp8') ? 'video/webm;codecs=vp8' : 'video/webm';
 
-      // บีบอัดบิตเรตให้เหลือ 300kbps เพื่อขนาดไฟล์ที่เล็กจิ๋ว
-
-      recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 300000 });
+      recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 250000 });
 
 
       recorder.ondataavailable = ev => { if (ev.data.size > 0) chunks.push(ev.data); };
@@ -268,7 +272,7 @@
 
         clearInterval(timerInterval);
 
-        $('status').textContent = '⏳ กำลังบันทึกและส่งข้อมูลเข้า Google Sheets... (ไฟล์เล็ก อัปโหลดไว)';
+        $('status').textContent = '⏳ กำลังบันทึกข้อมูลเข้า Google Sheets... (รวดเร็วทันใจ)';
 
         recorder.stop();
 
@@ -281,13 +285,15 @@
 
       const blob = new Blob(chunks, { type: recorder.mimeType.split(';')[0] });
 
-      const reader = new FileReader();
-
       
 
-      reader.onload = () => {
+      // แปลง Blob เป็น Base64 แบบเสถียรและรวดเร็วขึ้น
 
-        const base64 = reader.result.split(',')[1];
+      const reader = new FileReader();
+
+      reader.onloadend = () => {
+
+        const base64data = reader.result.split(',')[1];
 
         const payload = {
 
@@ -301,7 +307,7 @@
 
           mime: blob.type,
 
-          base64: base64
+          base64: base64data
 
         };
 
@@ -310,7 +316,7 @@
 
           .withSuccessHandler(() => {
 
-            $('status').textContent = '✅ บันทึกพัสดุ ' + currentOrder + ' สำเร็จ! บันทึกลงชีตเรียบร้อย';
+            $('status').textContent = '✅ บันทึกพัสดุ ' + currentOrder + ' สำเร็จเรียบร้อย!';
 
             resetDisplay();
 
