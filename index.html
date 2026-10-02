@@ -43,8 +43,8 @@
   </div>
 
   <script>
-    // ⚠️ ใส่ URL ของ Web App จาก Google Apps Script ของคุณตรงนี้
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbz_ตัวอย่าง_ใส่ลิงก์ของคุณตรงนี้/exec';
+    // ⚠️ ใส่ลิงก์ Web App ของ Google Apps Script คุณตรงนี้
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbz_ลิงก์ของคุณ/exec';
 
     let stream = null, recorder = null, chunks = [], phase = 'idle', currentOrder = null, timerInterval = null;
     const $ = id => document.getElementById(id);
@@ -60,7 +60,7 @@
         $('status').textContent = 'กล้องพร้อมแล้ว! ยิงสแกนบาร์โค้ดได้เลย';
         $('camBtn').style.display = 'none';
       } catch (e) {
-        alert('เปิดกล้องไม่ได้ (Permission Denied): กรุณาอนุญาตสิทธิ์การใช้งานกล้องที่รูปกุญแจมุมซ้ายบนของเบราว์เซอร์');
+        alert('เปิดกล้องไม่ได้: ' + e.message);
       }
     });
 
@@ -70,7 +70,6 @@
       $('ovTime').textContent = now.toLocaleTimeString('th-TH');
     }
 
-    // แม็ปแปลงภาษาไทยเป็นอังกฤษอัตโนมัติขณะสแกน
     const mapTH = {
       'ๅ':'1','ภ':'2','ถ':'3','ุ':'4','ึ':'5','ค':'6','ต':'7','จ':'8','ข':'9','ช':'0',
       'ๆ':'q','พ':'w','ะ':'e','ั':'r','ี':'t','ร':'y','น':'u','ย':'i','บ':'o','ล':'p',
@@ -135,7 +134,7 @@
       if (recorder && recorder.state !== 'inactive') {
         phase = 'processing';
         clearInterval(timerInterval);
-        $('status').textContent = '⏳ กำลังประมวลผลและส่งข้อมูลเข้า Google Sheets...';
+        $('status').textContent = '⏳ กำลังประมวลผลและบันทึกลง Google Sheets...';
         recorder.stop();
       }
     }
@@ -155,7 +154,6 @@
           base64: base64data
         };
 
-        // ส่งข้อมูลแบบ POST ไปยัง Google Apps Script
         fetch(GAS_URL, {
           method: 'POST',
           mode: 'no-cors',
