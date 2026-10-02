@@ -48,7 +48,7 @@
 
     .overlay-info span { color: #4ade80; font-weight: bold; }
 
-    input { width: 100%; padding: 14px; font-size: 18px; box-sizing: border-box; margin-top: 5px; border: 2px solid #cbd5e1; border-radius: 6px; }
+    input { width: 100%; padding: 14px; font-size: 18px; box-sizing: border-box; margin-top: 5px; border: 2px solid #cbd5e1; border-radius: 6px; ime-mode: disabled; }
 
     input:focus { border-color: #2563eb; outline: none; }
 
@@ -95,7 +95,9 @@
 
     <label for="scan"><strong>คลิกช่องนี้ แล้วยิง QR / บาร์โค้ดพัสดุ:</strong></label>
 
-    <input id="scan" placeholder="ยิงสแกนรอบที่ 1 เพื่อเริ่มอัด | ยิงสแกนรอบที่ 2 (เลขเดิม) เพื่อปิดงาน..." autocomplete="off" disabled>
+    <!-- เพิ่ม lang="en" เพื่อช่วยบังคับเบราว์เซอร์รับค่าเป็นอังกฤษ -->
+
+    <input id="scan" lang="en" placeholder="ยิงสแกนรอบที่ 1 เพื่อเริ่มอัด | ยิงสแกนรอบที่ 2 (เลขเดิม) เพื่อปิดงาน..." autocomplete="off" disabled>
 
   </div>
 
@@ -126,7 +128,7 @@
 
         $('scan').disabled = false;
 
-        $('scan'].focus();
+        $('scan').focus();
 
         $('status').textContent = 'กล้องพร้อมแล้ว! ยิงสแกนบาร์โค้ดพัสดุเพื่อเริ่มบันทึกทันที';
 
@@ -152,9 +154,11 @@
     }
 
 
-    function fixKeyboardLayout(str) {
+    // ฟังก์ชันแปลงภาษาไทยเป็นอังกฤษแบบละเอียด
 
-      const map = {
+    function forceEnglish(inputStr) {
+
+      const thaiToEng = {
 
         'ๅ':'1', 'ภ':'2', 'ถ':'3', 'ุ':'4', 'ึ':'5', 'ค':'6', 'ต':'7', 'จ':'8', 'ข':'9', 'ช':'0',
 
@@ -164,15 +168,18 @@
 
         'ผ':'z', 'ป':'x', 'แ':'c', 'อ':'v', 'ิ':'b', 'ื':'n', 'ท':'m',
 
-        'ๆ':'Q', 'พ':'W', 'ะ':'E', 'ั':'R', 'ี':'T', 'ร':'Y', 'น':'U', 'ย':'I', 'บ':'O', 'ล':'P',
+        'ญ':'Q', 'ฏ':'W', 'ธ':'E', 'ฑ':'R', 'ฌ':'T', 'ِ':'Y', '์':'U', 'ํ':'I', 'ฑ':'O', 'ฒ':'P',
 
-        'ฟ':'A', 'ห':'S', 'ก':'D', 'ด':'F', 'เ':'G', '้':'H', '่':'J', 'า':'K', 'ส':'L',
+        'ฤ':'A', 'ฆ':'S', 'ฏ':'D', 'โ':'F', 'ฌ':'G', '็':'H', '๋':'J', 'ษ':'K', 'ศ':'L',
 
-        'ผ':'Z', 'ป':'X', 'แ':'C', 'อ':'V', 'ิ':'B', 'ื':'N', 'ท':'M'
+        'ฉ':'Z', 'ฮ':'X', '์':'C', '？':'V', 'ฒ':'B', 'ฬ':'N', 'ฦ':'M',
+
+        'ภ':'2', 'ถ':'3', 'ุ':'4', 'ึ':'5', 'ค':'6', 'ต':'7', 'จ':'8', 'ข':'9', 'ช':'0', 'ๅ':'1'
 
       };
 
-      return str.split('').map(char => map[char] || char).join('');
+
+      return inputStr.split('').map(char => thaiToEng[char] || char).join('');
 
     }
 
@@ -181,7 +188,7 @@
 
       clearTimeout(scanTimer);
 
-      let rawVal = $('scan').value.trim();
+      let rawVal = $('scan').value;
 
       
 
@@ -189,24 +196,19 @@
 
         if (rawVal.length < 5) return;
 
+
+        // แปลงข้อความที่พิมพ์/ยิงเข้ามาให้อยู่ในรูปภาษาอังกฤษเสมอ และตัดคำขยะด้านหลังออก
+
+        let converted = forceEnglish(rawVal);
+
+        let cleanOrder = converted.trim().split(/[\s\t\n]+/)[0];
+
         
-
-        let fixedStr = fixKeyboardLayout(rawVal);
-
-        let cleanOrder = fixedStr.split(/[\s\t\n]+/)[0].trim();
 
         $('scan').value = '';
 
 
-        // กรองให้รับเฉพาะรหัสพัสดุที่ถูกต้อง (มีความยาวตั้งแต่ 8 ตัวขึ้นไป และมีทั้งตัวอักษรกับตัวเลขผสมกัน เช่น MYOC...)
-
-        if (cleanOrder.length < 8 || !/[a-zA-Z]/.test(cleanOrder)) {
-
-          alert('รหัสพัสดุไม่ถูกต้อง (' + cleanOrder + ') กรุณายิงบาร์โค้ดพัสดุให้ถูกต้องครับ');
-
-          return;
-
-        }
+        if (!cleanOrder || cleanOrder.length < 5) return;
 
 
         if (phase === 'idle') {
@@ -227,7 +229,7 @@
 
         }
 
-      }, 200);
+      }, 150);
 
     };
 
@@ -272,7 +274,7 @@
 
         clearInterval(timerInterval);
 
-        $('status').textContent = '⏳ กำลังบันทึกข้อมูลเข้า Google Sheets... (รวดเร็วทันใจ)';
+        $('status').textContent = '⏳ กำลังบันทึกข้อมูลเข้า Google Sheets...';
 
         recorder.stop();
 
@@ -285,11 +287,9 @@
 
       const blob = new Blob(chunks, { type: recorder.mimeType.split(';')[0] });
 
-      
-
-      // แปลง Blob เป็น Base64 แบบเสถียรและรวดเร็วขึ้น
-
       const reader = new FileReader();
+
+      
 
       reader.onloadend = () => {
 
