@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+
+<html lang="th">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Packing Camera</title>
+
+  <style>
+
+    body {
+
+      font-family: sans-serif;
+
+      max-width: 960px;
+
+      margin: 20px auto;
+
+      padding: 16px;
+
+      background: #f5f7fb;
+
+    }
+
+
+    video {
+
+      width: 100%;
+
+      max-height: 480px;
+
+      background: #111;
+
+      border-radius: 12px;
+
+    }
+
+
+    input, button {
+
+      box-sizing: border-box;
+
+      padding: 12px;
+
+      margin: 5px 0;
+
+      font-size: 17px;
+
+    }
+
+
+    input { width: 100%; }
+
+    button { cursor: pointer; }
+
+    button:disabled { cursor: not-allowed; }
+
+
+    #status {
+
+      margin: 12px 0;
+
+      padding: 14px;
+
+      background: white;
+
+      border-left: 5px solid #2563eb;
+
+      white-space: pre-wrap;
+
+    }
+
+
+    #order {
+
+      font-size: 22px;
+
+      font-weight: bold;
+
+      margin: 12px 0;
+
+    }
+
+
+    #download {
+
+      display: inline-block;
+
+      margin: 12px 0;
+
+    }
+
+
+    #download[hidden] { display: none; }
+
+  </style>
+
+</head>
+
+<body>
+
+  <h2>กล้องบันทึกการแพ็กสินค้า</h2>
+
+
+  <button id="camera">เปิดกล้อง</button>
+
+  <button id="stop" disabled>หยุดและบันทึก</button>
+
+  <button id="retry" disabled>ลองอัปโหลดอีกครั้ง</button>
+
+
+  <div id="status">กรุณาเปิดกล้องก่อนใช้งาน</div>
+
+  <div id="order">ออเดอร์: -</div>
+
+
+  <video id="preview" autoplay playsinline muted></video>
+
+
+  <form id="scanForm">
+
+    <input
+
+      id="scan"
+
+      placeholder="คลิกช่องนี้ แล้วสแกน QR เลขออเดอร์"
+
+      autocomplete="off"
+
+      maxlength="80"
+
+      disabled
+
+    >
+
+  </form>
+
+
+  <a id="download" hidden>ดาวน์โหลดคลิปสำรอง</a>
+
+
+  <p>
+
+    สแกนเลขออเดอร์เพื่อเริ่ม และสแกนเลขเดิมเพื่อหยุด
+
+    ระบบจะหยุดอัตโนมัติเมื่อครบ 90 วินาที
+
+  </p>
+
+
+  <script>
+
+    const MAX_MS = 90000;
+
+    const MAX_BYTES = 15 * 1024 * 1024;
+
+
+    const params = new URLSearchParams(location.hash.slice(1));
+
+    const parentOrigin = params.get('parentOrigin');
+
+    const token = params.get('token');
+
+
+    const $ = id => document.getElementById(id);
+
+    const show = text => $('status').textContent = text;
+
+
+    let stream = null;
+
+    let recorder = null;
+
+    let chunks = [];
+
+    let phase = 'idle';
+
+    let current = null;
+
+    let pending = null;
+
+    let stopTimer = null;
+
+    let uploadTimer = null;
+
+    let downloadUrl = null;
+
+
+    function bridgeAvailable() {
+
+      return Boolean(
+
+        window.opener &&
+
+        !window.opener.closed &&
+
+        token &&
+
+        parentOrigin &&
+
+        parentOrigin.startsWith('https://')
+
+      );
+
+    }
+
+
+    function send(message) {
+
+      if (!bridgeAvailable()) {
+
+        throw new Error(
+
+          'ไม่พบหน้าหลัก กรุณาดาวน์โหลดคลิปสำรอง ' +
+
+          'แล้วเปิดหน้ากล้องใหม่จาก Apps Script'
+
+        );
+
+      }
+
+
+      window.opener.postMessage(
+
+        { ...message, token },
+
+        parentOrigin
+
+      );
+
+    }
+
+
+    function cameraReady() {
+
+      return stream &&
+
+        stream.getVideoTracks().some(
+
+          track => track.readyState === 'live'
+
+        );
+
+    }
+
+
+    function refreshControls() {
+
+      $('camera').disabled =
+
+        phase !== 'idle' || cameraReady();
+
+
+      $('scan').disabled =
+
+        !cameraReady() ||
+
+        !['idle', 'recording'].includes(phase);
+
+
+      $('stop').disabled = phase !== 'recording';
+
+      $('retry').disabled = phase !== 'pending';
+
+    }
+
+
+    function selectMime() {
+
+      const candidates = [
+
+        'video/webm;codecs=vp8',
+
+        'video/webm',
+
+        'video/mp4'
+
+      ];
+
+
+      return candidates.find(
+
+        type => MediaRecorder.isTypeSupported(type)
+
+      );
+
+    }
+
+
+    $('camera').onclick = async () => {
+
+      try {
+
+        if (!bridgeAvailable()) {
+
+          throw new Error(
+
+            'กรุณาเปิดหน้านี้จากปุ่มในระบบ Apps Script'
+
+          );
+
+        }
+
+
+        if (!navigator.mediaDevices || !window.MediaRecorder) {
+
+          throw new Error('เบราว์เซอร์นี้ไม่รองรับการบันทึก');
+
+        }
+
+
+        stream = await navigator.mediaDevices.getUserMedia({
+
+          video: {
+
+            width: { ideal: 1280 },
+
+            height: { ideal: 720 },
+
+            frameRate: { ideal: 15, max: 20 }
+
+          },
+
+          audio: false
+
+        });
+
+
+        $('preview').srcObject = stream;
+
+        await $('preview').play();
+
+
+        stream.getVideoTracks()[0].addEventListener('ended', () => {
+
+          show('กล้องหยุดทำงาน กรุณาตรวจสอบการเชื่อมต่อ');
+
+
+          if (phase === 'recording') {
+
+            stopRecording();
+
+          }
+
+
+          refreshControls();
+
+        });
+
+
+        refreshControls();
+
+        show('พร้อมใช้งาน สแกนเลขออเดอร์เพื่อเริ่ม');
+
+        $('scan').focus();
+
+      } catch (error) {
+
+        if (stream) {
+
+          stream.getTracks().forEach(track => track.stop());
+
+          stream = null;
+
+        }
+
+
+        refreshControls();
+
+        show('เปิดกล้องไม่ได้: ' + error.message);
+
+      }
+
+    };
+
+
+    $('scanForm').onsubmit = event => {
+
+      event.preventDefault();
+
+
+      const order = $('scan').value.trim();
+
+      $('scan').value = '';
+
+
+      if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$/.test(order)) {
+
+        show('QR ต้องเป็นรหัสออเดอร์ เช่น ORD-000123');
+
+        return;
+
+      }
+
+
+      if (phase === 'recording') {
+
+        // กัน Enter ซ้ำติดกันจากเครื่องสแกน
+
+        if (Date.now() - current.startedAt < 1500) return;
+
+
+        if (order === current.order) {
+
+          stopRecording();
+
+        } else {
+
+          show(
+
+            'กำลังอัดออเดอร์ ' + current.order +
+
+            ' กรุณาจบออเดอร์เดิมก่อน'
+
+          );
+
+        }
+
+
+        return;
+
+      }
+
+
+      if (phase === 'idle') {
+
+        startRecording(order);
+
+      }
+
+    };
+
+
+    function startRecording(order) {
+
+      try {
+
+        if (!cameraReady()) {
+
+          throw new Error('กล้องยังไม่พร้อม');
+
+        }
+
+
+        const mime = selectMime();
+
+
+        if (!mime) {
+
+          throw new Error('ไม่พบรูปแบบวิดีโอที่รองรับ');
+
+        }
+
+
+        recorder = new MediaRecorder(stream, {
+
+          mimeType: mime,
+
+          videoBitsPerSecond: 800000
+
+        });
+
+
+        chunks = [];
+
+
+        current = {
+
+          id: crypto.randomUUID(),
+
+          order,
+
+          startedAt: Date.now()
+
+        };
+
+
+        recorder.ondataavailable = event => {
+
+          if (event.data.size) chunks.push(event.data);
+
+        };
+
+
+        recorder.onstop = finishRecording;
+
+
+        recorder.onerror = () => {
+
+          show(
+
+            'เกิดข้อผิดพลาดระหว่างอัด ' +
+
+            'คลิปที่ได้อาจไม่ครบ กรุณาตรวจสอบ'
+
+          );
+
+
+          if (recorder.state !== 'inactive') {
+
+            stopRecording();
+
+          }
+
+        };
+
+
+        recorder.start(1000);
+
+        phase = 'recording';
+
+
+        $('download').hidden = true;
+
+        $('order').textContent = 'ออเดอร์: ' + order;
+
+
+        show(
+
+          'กำลังบันทึก: ' + order +
+
+          '\nสแกนเลขเดิมอีกครั้งเพื่อหยุด'
+
+        );
+
+
+        stopTimer = setTimeout(stopRecording, MAX_MS);
+
+
+        refreshControls();
+
+        $('scan').focus();
+
+      } catch (error) {
+
+        show('เริ่มบันทึกไม่ได้: ' + error.message);
+
+      }
+
+    }
+
+
+    function stopRecording() {
+
+      if (!recorder || recorder.state === 'inactive') return;
+
+
+      clearTimeout(stopTimer);
+
+      phase = 'processing';
+
+      show('กำลังเตรียมคลิป...');
+
+      refreshControls();
+
+
+      recorder.stop();
+
+    }
+
+
+    async function finishRecording() {
+
+      clearTimeout(stopTimer);
+
+
+      const mime = recorder.mimeType.split(';')[0];
+
+      const blob = new Blob(chunks, { type: mime });
+
+      chunks = [];
+
+
+      const extension = mime === 'video/mp4' ? 'mp4' : 'webm';
+
+
+      if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+
+      downloadUrl = URL.createObjectURL(blob);
+
+
+      $('download').href = downloadUrl;
+
+      $('download').download =
+
+        current.order.replace(/[^A-Za-z0-9._-]/g, '_') +
+
+        '_' + current.id + '.' + extension;
+
+
+      $('download').hidden = false;
+
+
+      pending = {
+
+        ...current,
+
+        endedAt: Date.now(),
+
+        mime,
+
+        blob
+
+      };
+
+
+      if (!blob.size || blob.size > MAX_BYTES) {
+
+        phase = 'blocked';
+
+        refreshControls();
+
+
+        show(
+
+          'ไฟล์ว่างหรือเกิน 15 MB จึงไม่อัปโหลด\n' +
+
+          'ดาวน์โหลดคลิปสำรองก่อน แล้วเปิดหน้ากล้องใหม่'
+
+        );
+
+
+        return;
+
+      }
+
+
+      phase = 'pending';
+
+      refreshControls();
+
+      await upload();
+
+    }
+
+
+    function blobToBase64(blob) {
+
+      return new Promise((resolve, reject) => {
+
+        const reader = new FileReader();
+
+
+        reader.onload = () => {
+
+          resolve(String(reader.result).split(',')[1]);
+
+        };
+
+
+        reader.onerror = () => {
+
+          reject(new Error('อ่านไฟล์วิดีโอไม่สำเร็จ'));
+
+        };
+
+
+        reader.readAsDataURL(blob);
+
+      });
+
+    }
+
+
+    async function upload() {
+
+      if (!pending || phase !== 'pending') return;
+
+
+      phase = 'uploading';
+
+      refreshControls();
+
+      show('กำลังอัปโหลด ห้ามปิดหน้ากล้องและหน้าหลัก');
+
+
+      try {
+
+        const base64 = await blobToBase64(pending.blob);
+
+
+        send({
+
+          type: 'SAVE',
+
+          record: {
+
+            id: pending.id,
+
+            order: pending.order,
+
+            startedAt: pending.startedAt,
+
+            endedAt: pending.endedAt,
+
+            mime: pending.mime,
+
+            base64
+
+          }
+
+        });
+
+
+        clearTimeout(uploadTimer);
+
+
+        uploadTimer = setTimeout(() => {
+
+          if (phase !== 'uploading') return;
+
+
+          phase = 'pending';
+
+          refreshControls();
+
+
+          show(
+
+            'ยังไม่ได้รับผลยืนยัน อาจยังอัปโหลดอยู่\n' +
+
+            'รอสักครู่แล้วลองอีกครั้ง หรือดาวน์โหลดสำรอง'
+
+          );
+
+        }, 120000);
+
+      } catch (error) {
+
+        phase = 'pending';
+
+        refreshControls();
+
+        show('อัปโหลดไม่สำเร็จ: ' + error.message);
+
+      }
+
+    }
+
+
+    window.addEventListener('message', event => {
+
+      if (
+
+        event.source !== window.opener ||
+
+        event.origin !== parentOrigin ||
+
+        !event.data ||
+
+        event.data.token !== token ||
+
+        !pending ||
+
+        event.data.id !== pending.id
+
+      ) {
+
+        return;
+
+      }
+
+
+      const message = event.data;
+
+
+      if (message.type === 'SAVED') {
+
+        clearTimeout(uploadTimer);
+
+
+        const order = pending.order;
+
+        pending = null;
+
+        current = null;
+
+        phase = 'idle';
+
+
+        refreshControls();
+
+        show('บันทึกสำเร็จ: ' + order + '\nพร้อมสแกนออเดอร์ถัดไป');
+
+        $('scan').focus();
+
+      }
+
+
+      if (message.type === 'SAVE_ERROR') {
+
+        clearTimeout(uploadTimer);
+
+        phase = 'pending';
+
+
+        refreshControls();
+
+
+        show(
+
+          'บันทึกไม่สำเร็จ: ' + message.error +
+
+          '\nลองอัปโหลดอีกครั้ง หรือดาวน์โหลดคลิปสำรอง'
+
+        );
+
+      }
+
+    });
+
+
+    $('stop').onclick = stopRecording;
+
+    $('retry').onclick = upload;
+
+
+    window.addEventListener('beforeunload', event => {
+
+      if (phase !== 'idle') {
+
+        event.preventDefault();
+
+        event.returnValue = '';
+
+      }
+
+    });
+
+
+    try {
+
+      send({ type: 'READY' });
+
+    } catch (error) {
+
+      show(error.message);
+
+    }
+
+
+    refreshControls();
+
+  </script>
+
+</body>
+
+</html>
