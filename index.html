@@ -48,7 +48,7 @@
 
     .overlay-info span { color: #4ade80; font-weight: bold; }
 
-    input { width: 100%; padding: 14px; font-size: 18px; box-sizing: border-box; margin-top: 5px; border: 2px solid #cbd5e1; border-radius: 6px; ime-mode: disabled; }
+    input { width: 100%; padding: 14px; font-size: 18px; box-sizing: border-box; margin-top: 5px; border: 2px solid #cbd5e1; border-radius: 6px; }
 
     input:focus { border-color: #2563eb; outline: none; }
 
@@ -95,9 +95,7 @@
 
     <label for="scan"><strong>คลิกช่องนี้ แล้วยิง QR / บาร์โค้ดพัสดุ:</strong></label>
 
-    <!-- เพิ่ม lang="en" เพื่อช่วยบังคับเบราว์เซอร์รับค่าเป็นอังกฤษ -->
-
-    <input id="scan" lang="en" placeholder="ยิงสแกนรอบที่ 1 เพื่อเริ่มอัด | ยิงสแกนรอบที่ 2 (เลขเดิม) เพื่อปิดงาน..." autocomplete="off" disabled>
+    <input id="scan" placeholder="ยิงสแกนรอบที่ 1 เพื่อเริ่มอัด | ยิงสแกนรอบที่ 2 (เลขเดิม) เพื่อปิดงาน..." autocomplete="off" disabled>
 
   </div>
 
@@ -154,34 +152,48 @@
     }
 
 
-    // ฟังก์ชันแปลงภาษาไทยเป็นอังกฤษแบบละเอียด
+    // แม็ปปิ้งแป้นพิมพ์ไทย -> อังกฤษ แบบอัตโนมัติทันทีที่ยิงบาร์โค้ดเข้ามา
 
-    function forceEnglish(inputStr) {
+    const thToEnMap = {
 
-      const thaiToEng = {
+      'ๅ':'1', 'ภ':'2', 'ถ':'3', 'ุ':'4', 'ึ':'5', 'ค':'6', 'ต':'7', 'จ':'8', 'ข':'9', 'ช':'0',
 
-        'ๅ':'1', 'ภ':'2', 'ถ':'3', 'ุ':'4', 'ึ':'5', 'ค':'6', 'ต':'7', 'จ':'8', 'ข':'9', 'ช':'0',
+      'ๆ':'q', 'พ':'w', 'ะ':'e', 'ั':'r', 'ี':'t', 'ร':'y', 'น':'u', 'ย':'i', 'บ':'o', 'ล':'p',
 
-        'ๆ':'q', 'พ':'w', 'ะ':'e', 'ั':'r', 'ี':'t', 'ร':'y', 'น':'u', 'ย':'i', 'บ':'o', 'ล':'p',
+      'ฟ':'a', 'ห':'s', 'ก':'d', 'ด':'f', 'เ':'g', '้':'h', '่':'j', 'า':'k', 'ส':'l',
 
-        'ฟ':'a', 'ห':'s', 'ก':'d', 'ด':'f', 'เ':'g', '้':'h', '่':'j', 'า':'k', 'ส':'l',
+      'ผ':'z', 'ป':'x', 'แ':'c', 'อ':'v', 'ิ':'b', 'ื':'n', 'ท':'m',
 
-        'ผ':'z', 'ป':'x', 'แ':'c', 'อ':'v', 'ิ':'b', 'ื':'n', 'ท':'m',
+      'ญ':'Q', 'ฏ':'W', 'ธ':'E', 'ฑ':'R', 'ฌ':'T', 'ِ':'Y', '์':'U', 'ํ':'I', 'ฑ':'O', 'ฒ':'P',
 
-        'ญ':'Q', 'ฏ':'W', 'ธ':'E', 'ฑ':'R', 'ฌ':'T', 'ِ':'Y', '์':'U', 'ํ':'I', 'ฑ':'O', 'ฒ':'P',
+      'ฤ':'A', 'ฆ':'S', 'ฏ':'D', 'โ':'F', 'ฌ':'G', '็':'H', '๋':'J', 'ษ':'K', 'ศ':'L',
 
-        'ฤ':'A', 'ฆ':'S', 'ฏ':'D', 'โ':'F', 'ฌ':'G', '็':'H', '๋':'J', 'ษ':'K', 'ศ':'L',
+      'ฉ':'Z', 'ฮ':'X', '์':'C', '？':'V', 'ฒ':'B', 'ฬ':'N', 'ฦ':'M'
 
-        'ฉ':'Z', 'ฮ':'X', '์':'C', '？':'V', 'ฒ':'B', 'ฬ':'N', 'ฦ':'M',
-
-        'ภ':'2', 'ถ':'3', 'ุ':'4', 'ึ':'5', 'ค':'6', 'ต':'7', 'จ':'8', 'ข':'9', 'ช':'0', 'ๅ':'1'
-
-      };
+    };
 
 
-      return inputStr.split('').map(char => thaiToEng[char] || char).join('');
+    $('scan').addEventListener('keydown', (e) => {
 
-    }
+      // ดักแปลงตัวอักษรไทยให้เป็นอังกฤษทันทีที่ป้อนเข้ามา
+
+      if (thToEnMap[e.key]) {
+
+        e.preventDefault();
+
+        const start = $('scan').selectionStart;
+
+        const end = $('scan').selectionEnd;
+
+        const val = $('scan').value;
+
+        $('scan').value = val.substring(0, start) + thToEnMap[e.key] + val.substring(end);
+
+        $('scan.setSelectionRange(start + 1, start + 1);
+
+      }
+
+    });
 
 
     $('scan').oninput = (e) => {
@@ -197,13 +209,9 @@
         if (rawVal.length < 5) return;
 
 
-        // แปลงข้อความที่พิมพ์/ยิงเข้ามาให้อยู่ในรูปภาษาอังกฤษเสมอ และตัดคำขยะด้านหลังออก
+        // ตัดเอาเฉพาะคำแรกสุด (ตัดช่องว่างและข้อมูลส่วนเกินด้านหลังทิ้ง)
 
-        let converted = forceEnglish(rawVal);
-
-        let cleanOrder = converted.trim().split(/[\s\t\n]+/)[0];
-
-        
+        let cleanOrder = rawVal.trim().split(/[\s\t\n]+/)[0];
 
         $('scan').value = '';
 
@@ -274,7 +282,7 @@
 
         clearInterval(timerInterval);
 
-        $('status').textContent = '⏳ กำลังบันทึกข้อมูลเข้า Google Sheets...';
+        $('status').textContent = '⏳ กำลังบันทึกและส่งข้อมูลเข้า Google Sheets...';
 
         recorder.stop();
 
@@ -312,11 +320,13 @@
         };
 
 
+        // ส่งข้อมูลไปบันทึกผ่าน Google Apps Script
+
         google.script.run
 
-          .withSuccessHandler(() => {
+          .withSuccessHandler((res) => {
 
-            $('status').textContent = '✅ บันทึกพัสดุ ' + currentOrder + ' สำเร็จเรียบร้อย!';
+            $('status').textContent = '✅ บันทึกพัสดุ ' + currentOrder + ' ลง Google Sheets สำเร็จเรียบร้อย!';
 
             resetDisplay();
 
@@ -368,5 +378,7 @@
   </script>
 
 </body>
+
+</html>
 
 </html>
