@@ -22,27 +22,9 @@
 
     .overlay-info {
 
-      position: absolute;
+      position: absolute; top: 10px; left: 10px; background: rgba(0, 0, 0, 0.75);
 
-      top: 10px;
-
-      left: 10px;
-
-      background: rgba(0, 0, 0, 0.75);
-
-      color: #fff;
-
-      padding: 10px 15px;
-
-      border-radius: 6px;
-
-      font-size: 16px;
-
-      line-height: 1.6;
-
-      pointer-events: none;
-
-      font-family: monospace;
+      color: #fff; padding: 10px 15px; border-radius: 6px; font-size: 16px; line-height: 1.6; font-family: monospace;
 
     }
 
@@ -54,9 +36,7 @@
 
     #status { padding: 10px; background: #eff6ff; border-left: 4px solid #2563eb; margin-bottom: 10px; font-weight: bold; }
 
-    button { padding: 12px 24px; font-size: 16px; background: #16a34a; color: white; border: none; border-radius: 5px; cursor: pointer; z-index: 99; position: relative; }
-
-    button:active { background: #15803d; }
+    button { padding: 12px 24px; font-size: 16px; background: #16a34a; color: white; border: none; border-radius: 5px; cursor: pointer; }
 
   </style>
 
@@ -111,50 +91,34 @@
     const token = params.get('token');
 
 
-    let stream = null, recorder = null, chunks = [], phase = 'idle', currentOrder = null, timerInterval = null, scanTimer = null;
+    let stream = null, recorder = null, chunks = [], phase = 'idle', currentOrder = null, timerInterval = null;
 
     const $ = id => document.getElementById(id);
 
-
-    // แก้ปัญหาปุ่มเปิดกล้องกดไม่ติด ด้วยการผูก Event แบบสมบูรณ์
 
     document.getElementById('camBtn').addEventListener('click', async () => {
 
       try {
 
-        $('status').textContent = 'กำลังขออนุญาตเปิดกล้อง...';
+        $('status').textContent = 'กำลังเปิดกล้อง...';
 
-        stream = await navigator.mediaDevices.getUserMedia({ 
+        stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false });
 
-          video: { width: { ideal: 320 }, height: { ideal: 240 } }, 
+        $('preview').srcObject = stream;
 
-          audio: false 
-
-        });
-
-        
-
-        const videoEl = $('preview');
-
-        videoEl.srcObject = stream;
-
-        await videoEl.play();
-
-        
+        await $('preview').play();
 
         $('scan').disabled = false;
 
         $('scan').focus();
 
-        $('status').textContent = 'กล้องพร้อมแล้ว! ยิงสแกนบาร์โค้ดพัสดุเพื่อเริ่มบันทึกได้ทันที';
+        $('status').textContent = 'กล้องพร้อมแล้ว! ยิงสแกนบาร์โค้ดได้เลย';
 
         $('camBtn').style.display = 'none';
 
       } catch (e) {
 
-        alert('ไม่สามารถเปิดกล้องได้:กิจกกรรมการใช้งานถูกบล็อก หรือไม่ได้อนุญาตสิทธิ์กล้อง (Error: ' + e.message + ')');
-
-        $('status').textContent = '❌ เปิดกล้องไม่สำเร็จ กรุณาตรวจสอบสิทธิ์การเข้าถึงกล้องของเบราว์เซอร์';
+        alert('เปิดกล้องไม่ได้: ' + e.message);
 
       }
 
@@ -172,82 +136,87 @@
     }
 
 
-    // ฟังก์ชันแปลงตัวอักษรไทยเป็นอังกฤษอัตโนมัติทันที
+    // แม็ปแปลงภาษาไทยเป็นอังกฤษแบบสมบูรณ์
 
-    const thToEnMap = {
+    const mapTH = {
 
-      'ๅ':'1', 'ภ':'2', 'ถ':'3', 'ุ':'4', 'ึ':'5', 'ค':'6', 'ต':'7', 'จ':'8', 'ข':'9', 'ช':'0',
+      'ๅ':'1','ภ':'2','ถ':'3','ุ':'4','ึ':'5','ค':'6','ต':'7','จ':'8','ข':'9','ช':'0',
 
-      'ๆ':'q', 'พ':'w', 'ะ':'e', 'ั':'r', 'ี':'t', 'ร':'y', 'น':'u', 'ย':'i', 'บ':'o', 'ล':'p',
+      'ๆ':'q','พ':'w','ะ':'e','ั':'r','ี':'t','ร':'y','น':'u','ย':'i','บ':'o','ล':'p',
 
-      'ฟ':'a', 'ห':'s', 'ก':'d', 'ด':'f', 'เ':'g', '้':'h', '่':'j', 'า':'k', 'ส':'l',
+      'ฟ':'a','ห':'s','ก':'d','ด':'f','เ':'g','้':'h','่':'j','า':'k','ส':'l',
 
-      'ผ':'z', 'ป':'x', 'แ':'c', 'อ':'v', 'ิ':'b', 'ื':'n', 'ท':'m',
+      'ผ':'z','ป':'x','แ':'c','อ':'v','ิ':'b','ื':'n','ท':'m',
 
-      'ญ':'Q', 'ฏ':'W', 'ธ':'E', 'ฑ':'R', 'ฌ':'T', 'ِ':'Y', '์':'U', 'ํ':'I', 'ฑ':'O', 'ฒ':'P',
+      'ภ':'2','ถ':'3','ุ':'4','ึ':'5','ค':'6','ต':'7','จ':'8','ข':'9','ช':'0','ๅ':'1',
 
-      'ฤ':'A', 'ฆ':'S', 'ฏ':'D', 'โ':'F', 'ฌ':'G', '็':'H', '๋':'J', 'ษ':'K', 'ศ':'L',
+      'ๆ':'Q','พ':'W','ะ':'E','ั':'R','ี':'T','ร':'Y','น':'U','ย':'I','บ':'O','ล':'P',
 
-      'ฉ':'Z', 'ฮ':'X', '์':'C', '？':'V', 'ฒ':'B', 'ฬ':'N', 'ฦ':'M'
+      'ฟ':'A','ห':'S','ก':'D','ด':'F','เ':'G','้':'H','่':'J','า':'K','ส':'L',
+
+      'ผ':'Z','ป':'X','แ':'C','อ':'V','ิ':'B','ื':'N','ท':'M'
 
     };
 
 
-    function autoFixText(str) {
+    $('scan').addEventListener('keydown', (e) => {
 
-      return str.split('').map(char => thToEnMap[char] || char).join('');
+      // ดักจับและแปลงค่าทันทีที่ยิงบาร์โค้ดเข้ามา ไม่สนภาษาในเครื่อง
 
-    }
+      if (mapTH[e.key]) {
 
+        e.preventDefault();
 
-    $('scan').addEventListener('input', (e) => {
+        const start = $('scan').selectionStart;
 
-      clearTimeout(scanTimer);
+        const end = $('scan').selectionEnd;
 
-      let rawVal = $('scan').value;
+        const val = $('scan').value;
 
-      
+        $('scan').value = val.substring(0, start) + mapTH[e.key] + val.substring(end);
 
-      scanTimer = setTimeout(() => {
+        $('scan').setSelectionRange(start + 1, start + 1);
 
-        if (!rawVal || rawVal.length < 3) return;
+      }
 
-
-        // แปลงภาษาไทยเป็นอังกฤษ และตัดเอาเฉพาะคำแรกสุด (ตัดช่องว่างหรือ Enter ท้ายบาร์โค้ดออก)
-
-        let fixedStr = autoFixText(rawVal);
-
-        let cleanOrder = fixedStr.trim().split(/[\s\t\n]+/)[0];
-
-        
-
-        $('scan').value = '';
+    });
 
 
-        if (!cleanOrder || cleanOrder.length < 3) return;
+    $('scan').addEventListener('change', (e) => {
+
+      let rawVal = $('scan').value.trim();
+
+      $('scan').value = '';
+
+      if (!rawVal) return;
 
 
-        if (phase === 'idle') {
+      // กรองเอาเฉพาะตัวอักษรภาษาอังกฤษ ตัวเลข และขีด
 
-          startRecord(cleanOrder);
+      let cleanOrder = rawVal.split(/[\s\t\n]+/)[0].replace(/[^a-zA-Z0-9\-_]/g, '');
 
-        } else if (phase === 'recording') {
+      if (cleanOrder.length < 3) return;
 
-          if (cleanOrder === currentOrder) {
 
-            stopRecord();
+      if (phase === 'idle') {
 
-          } else {
+        startRecord(cleanOrder);
 
-            alert('กำลังบันทึกพัสดุ ' + currentOrder + ' อยู่! กรุณาสแกนเลขเดิมซ้ำเพื่อปิดงาน');
+      } else if (phase === 'recording') {
 
-            $('scan').focus();
+        if (cleanOrder === currentOrder) {
 
-          }
+          stopRecord();
+
+        } else {
+
+          alert('กำลังบันทึกพัสดุ ' + currentOrder + ' อยู่! กรุณาสแกนเลขเดิมซ้ำเพื่อปิดงาน');
+
+          $('scan').focus();
 
         }
 
-      }, 100);
+      }
 
     });
 
@@ -292,7 +261,7 @@
 
         clearInterval(timerInterval);
 
-        $('status').textContent = '⏳ กำลังบันทึกและส่งข้อมูลเข้า Google Sheets...';
+        $('status').textContent = '⏳ กำลังประมวลผลและบันทึกลง Google Sheets...';
 
         recorder.stop();
 
@@ -332,17 +301,11 @@
 
         google.script.run
 
-          .withSuccessHandler(() => {
+          .withSuccessHandler((res) => {
 
-            $('status').textContent = '✅ บันทึกพัสดุ ' + currentOrder + ' ลง Google Sheets สำเร็จ!';
+            $('status').textContent = '✅ บันทึกพัสดุ ' + currentOrder + ' สำเร็จเรียบร้อย!';
 
             resetDisplay();
-
-            if (window.opener) {
-
-              window.opener.postMessage({ type: 'SAVED', order: currentOrder, token }, parentOrigin);
-
-            }
 
           })
 
