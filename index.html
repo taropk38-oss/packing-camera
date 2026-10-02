@@ -12,21 +12,23 @@
 
   <style>
 
-    body { font-family: sans-serif; max-width: 900px; margin: 10px auto; padding: 10px; background: #f8fafc; }
+    body { font-family: sans-serif; max-width: 900px; margin: 20px auto; padding: 15px; background: #f8fafc; }
 
-    .box { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 10px; }
+    .box { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 15px; }
 
-    video { width: 100%; max-height: 360px; background: #000; border-radius: 6px; }
+    video { width: 100%; max-height: 400px; background: #000; border-radius: 6px; }
 
-    input { width: 100%; padding: 12px; font-size: 18px; box-sizing: border-box; margin-top: 5px; border: 2px solid #cbd5e1; border-radius: 6px; }
+    input { width: 100%; padding: 14px; font-size: 18px; box-sizing: border-box; margin-top: 8px; border: 2px solid #cbd5e1; border-radius: 6px; }
 
     input:focus { border-color: #2563eb; outline: none; }
 
-    .info { font-size: 18px; margin: 5px 0; }
+    .info { font-size: 20px; margin: 8px 0; }
 
     .highlight { color: #2563eb; font-weight: bold; }
 
-    #status { padding: 10px; background: #eff6ff; border-left: 4px solid #2563eb; margin-bottom: 10px; }
+    #status { padding: 12px; background: #eff6ff; border-left: 4px solid #2563eb; margin-bottom: 15px; font-size: 16px; font-weight: bold; }
+
+    button { padding: 12px 20px; font-size: 16px; background: #16a34a; color: white; border: none; border-radius: 5px; cursor: pointer; }
 
   </style>
 
@@ -36,15 +38,17 @@
 
   <div class="box" style="display:flex; justify-content:space-between; align-items:center;">
 
-    <h3 style="margin:0;">ระบบกล้องสแกนแพ็กสินค้า</h3>
+    <h2 style="margin:0;">กล้องบันทึกการแพ็กสินค้า</h2>
 
-    <button id="camBtn" style="padding:10px 15px; background:#16a34a; color:white; border:none; border-radius:5px; cursor:pointer;">เปิดกล้อง</button>
+    <button id="camBtn">เปิดกล้อง</button>
 
   </div>
 
 
   <div id="status">กรุณากดปุ่ม "เปิดกล้อง" ด้านบนก่อนเริ่มใช้งาน</div>
 
+
+  <!-- ส่วนแสดงผลเลขพัสดุ วันที่ และเวลา ตามที่ต้องการ -->
 
   <div class="box">
 
@@ -60,11 +64,11 @@
   <video id="preview" autoplay playsinline muted></video>
 
 
-  <div class="box" style="margin-top:10px;">
+  <div class="box">
 
-    <label for="scan"><strong>คลิกช่องนี้แล้วใช้เครื่องสแกน QR / บาร์โค้ด:</strong></label>
+    <label for="scan"><strong>คลิกช่องนี้ แล้วสแกน QR / บาร์โค้ดพัสดุ:</strong></label>
 
-    <input id="scan" placeholder="สแกนเพื่อเริ่ม หรือสแกนซ้ำเพื่อปิดงาน..." autocomplete="off" disabled>
+    <input id="scan" placeholder="สแกนครั้งที่ 1 เพื่อเริ่มบันทึก | สแกนเลขเดิมซ้ำเพื่อปิดงาน..." autocomplete="off" disabled>
 
   </div>
 
@@ -79,7 +83,6 @@
 
 
     let stream = null, recorder = null, chunks = [], phase = 'idle', currentOrder = null, startTime = null;
-
 
     const $ = id => document.getElementById(id);
 
@@ -98,7 +101,7 @@
 
         $('scan').focus();
 
-        $('status').textContent = 'กล้องพร้อมแล้ว! สแกนบาร์โค้ด/QR เพื่อเริ่มบันทึก';
+        $('status').textContent = 'กล้องพร้อมแล้ว! สแกน QR Code พัสดุเพื่อเริ่มบันทึก';
 
         $('camBtn').style.display = 'none';
 
@@ -132,7 +135,7 @@
 
         } else {
 
-          alert('กำลังบันทึกออเดอร์ ' + currentOrder + ' อยู่! กรุณาสแกนเลขเดิมเพื่อปิดงาน');
+          alert('กำลังบันทึกพัสดุ ' + currentOrder + ' อยู่! กรุณาสแกนเลขเดิมอีกครั้งเพื่อปิดงาน');
 
         }
 
@@ -164,13 +167,15 @@
       phase = 'recording';
 
 
+      // แสดงข้อมูลบนหน้าจอทันทีตามที่ต้องการ
+
       $('lblOrder').textContent = order;
 
       $('lblDate').textContent = startTime.toLocaleDateString('th-TH');
 
       $('lblTime').textContent = startTime.toLocaleTimeString('th-TH');
 
-      $('status').textContent = '🔴 กำลังบันทึกวิดีโอ... (สแกนเลขเดิมอีกครั้งเพื่อปิดงาน)';
+      $('status').textContent = '🔴 กำลังบันทึกวิดีโอ... (สแกนเลขเดิมซ้ำอีกครั้งเพื่อจบงาน)';
 
     }
 
@@ -181,7 +186,7 @@
 
         phase = 'processing';
 
-        $('status').textContent = '⏳ กำลังประมวลผลและบันทึกข้อมูล...';
+        $('status').textContent = '⏳ กำลังประมวลผลและอัปโหลดวิดีโอลงระบบ...';
 
         recorder.stop();
 
@@ -223,7 +228,7 @@
 
           .withSuccessHandler(() => {
 
-            $('status').textContent = '✅ บันทึกออเดอร์ ' + currentOrder + ' สำเร็จ! พร้อมสแกนออเดอร์ถัดไป';
+            $('status').textContent = '✅ บันทึกพัสดุ ' + currentOrder + ' สำเร็จ! พร้อมสแกนรายการต่อไป';
 
             resetDisplay();
 
