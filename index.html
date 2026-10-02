@@ -43,14 +43,13 @@
   </div>
 
   <script>
-    const params = new URLSearchParams(location.hash.slice(1));
-    const parentOrigin = params.get('parentOrigin');
-    const token = params.get('token');
+    // ⚠️ ใส่ URL ของ Web App จาก Google Apps Script ของคุณตรงนี้
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbz_ตัวอย่าง_ใส่ลิงก์ของคุณตรงนี้/exec';
 
     let stream = null, recorder = null, chunks = [], phase = 'idle', currentOrder = null, timerInterval = null;
     const $ = id => document.getElementById(id);
 
-    document.getElementById('camBtn').addEventListener('click', async () => {
+    $('camBtn').addEventListener('click', async () => {
       try {
         $('status').textContent = 'กำลังเปิดกล้อง...';
         stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false });
@@ -61,7 +60,7 @@
         $('status').textContent = 'กล้องพร้อมแล้ว! ยิงสแกนบาร์โค้ดได้เลย';
         $('camBtn').style.display = 'none';
       } catch (e) {
-        alert('เปิดกล้องไม่ได้: ' + e.message);
+        alert('เปิดกล้องไม่ได้ (Permission Denied): กรุณาอนุญาตสิทธิ์การใช้งานกล้องที่รูปกุญแจมุมซ้ายบนของเบราว์เซอร์');
       }
     });
 
@@ -71,7 +70,7 @@
       $('ovTime').textContent = now.toLocaleTimeString('th-TH');
     }
 
-    // แปลงตัวอักษรไทยที่หลุดมาเป็นอังกฤษแบบเบ็ดเสร็จ
+    // แม็ปแปลงภาษาไทยเป็นอังกฤษอัตโนมัติขณะสแกน
     const mapTH = {
       'ๅ':'1','ภ':'2','ถ':'3','ุ':'4','ึ':'5','ค':'6','ต':'7','จ':'8','ข':'9','ช':'0',
       'ๆ':'q','พ':'w','ะ':'e','ั':'r','ี':'t','ร':'y','น':'u','ย':'i','บ':'o','ล':'p',
@@ -83,30 +82,23 @@
       'ผ':'Z','ป':'X','แ':'C','อ':'V','ิ':'B','ื':'N','ท':'M'
     };
 
-    function translateText(input) {
-      return input.split('').map(char => mapTH[char] || char).join('');
-    }
-
-    // ใช้การจับ Event เมื่อยิงบาร์โค้ดเสร็จ (กด Enter หรือส่งข้อมูลครบก้อน)
-    $('scan').addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        processScan();
+    $('scan').addEventListener('keydown', (e) => {
+      if (mapTH[e.key]) {
+        e.preventDefault();
+        const start = $('scan').selectionStart;
+        const end = $('scan').selectionEnd;
+        const val = $('scan').value;
+        $('scan').value = val.substring(0, start) + mapTH[e.key] + val.substring(end);
+        $('scan').setSelectionRange(start + 1, start + 1);
       }
     });
 
     $('scan').addEventListener('change', () => {
-      processScan();
-    });
-
-    function processScan() {
       let rawVal = $('scan').value.trim();
       $('scan').value = '';
       if (!rawVal) return;
 
-      // แปลงภาษาไทยเป้นอังกฤษ และตัดเอาเฉพาะข้อความหลัก
-      let translated = translateText(rawVal);
-      let cleanOrder = translated.split(/[\s\t\n]+/)[0].replace(/[^a-zA-Z0-9\-_]/g, '');
-      
+      let cleanOrder = rawVal.split(/[\s\t\n]+/)[0].replace(/[^a-zA-Z0-9\-_]/g, '');
       if (cleanOrder.length < 3) return;
 
       if (phase === 'idle') {
@@ -119,7 +111,7 @@
           $('scan').focus();
         }
       }
-    }
+    });
 
     function startRecord(order) {
       currentOrder = order;
@@ -143,7 +135,7 @@
       if (recorder && recorder.state !== 'inactive') {
         phase = 'processing';
         clearInterval(timerInterval);
-        $('status').textContent = '⏳ กำลังประมวลผลและบันทึกลง Google Sheets...';
+        $('status').textContent = '⏳ กำลังประมวลผลและส่งข้อมูลเข้า Google Sheets...';
         recorder.stop();
       }
     }
@@ -163,17 +155,22 @@
           base64: base64data
         };
 
-        google.script.run
-          .withSuccessHandler((res) => {
-            $('status').textContent = '✅ บันทึกพัสดุ ' + currentOrder + ' ลง Google Sheets สำเร็จเรียบร้อย!';
-            resetDisplay();
-          })
-          .withFailureHandler(err => {
-            $('status').textContent = '❌ บันทึกไม่สำเร็จ: ' + err.message;
-            phase = 'idle';
-            $('scan').focus();
-          })
-          .saveRecording(payload);
+        // ส่งข้อมูลแบบ POST ไปยัง Google Apps Script
+        fetch(GAS_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        })
+        .then(() => {
+          $('status').textContent = '✅ บันทึกพัสดุ ' + currentOrder + ' ลง Google Sheets สำเร็จเรียบร้อย!';
+          resetDisplay();
+        })
+        .catch(err => {
+          $('status').textContent = '❌ บันทึกไม่สำเร็จ: ' + err.message;
+          phase = 'idle';
+          $('scan').focus();
+        });
       };
       reader.readAsDataURL(blob);
     }
