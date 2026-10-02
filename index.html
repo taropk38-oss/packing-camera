@@ -8,94 +8,25 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <title>Packing Camera</title>
+  <title>Packing Camera Scanner</title>
 
   <style>
 
-    body {
+    body { font-family: sans-serif; max-width: 900px; margin: 10px auto; padding: 10px; background: #f8fafc; }
 
-      font-family: sans-serif;
+    .box { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 10px; }
 
-      max-width: 960px;
+    video { width: 100%; max-height: 360px; background: #000; border-radius: 6px; }
 
-      margin: 20px auto;
+    input { width: 100%; padding: 12px; font-size: 18px; box-sizing: border-box; margin-top: 5px; border: 2px solid #cbd5e1; border-radius: 6px; }
 
-      padding: 16px;
+    input:focus { border-color: #2563eb; outline: none; }
 
-      background: #f5f7fb;
+    .info { font-size: 18px; margin: 5px 0; }
 
-    }
+    .highlight { color: #2563eb; font-weight: bold; }
 
-
-    video {
-
-      width: 100%;
-
-      max-height: 480px;
-
-      background: #111;
-
-      border-radius: 12px;
-
-    }
-
-
-    input, button {
-
-      box-sizing: border-box;
-
-      padding: 12px;
-
-      margin: 5px 0;
-
-      font-size: 17px;
-
-    }
-
-
-    input { width: 100%; }
-
-    button { cursor: pointer; }
-
-    button:disabled { cursor: not-allowed; }
-
-
-    #status {
-
-      margin: 12px 0;
-
-      padding: 14px;
-
-      background: white;
-
-      border-left: 5px solid #2563eb;
-
-      white-space: pre-wrap;
-
-    }
-
-
-    #order {
-
-      font-size: 22px;
-
-      font-weight: bold;
-
-      margin: 12px 0;
-
-    }
-
-
-    #download {
-
-      display: inline-block;
-
-      margin: 12px 0;
-
-    }
-
-
-    #download[hidden] { display: none; }
+    #status { padding: 10px; background: #eff6ff; border-left: 4px solid #2563eb; margin-bottom: 10px; }
 
   </style>
 
@@ -103,61 +34,42 @@
 
 <body>
 
-  <h2>กล้องบันทึกการแพ็กสินค้า</h2>
+  <div class="box" style="display:flex; justify-content:space-between; align-items:center;">
+
+    <h3 style="margin:0;">ระบบกล้องสแกนแพ็กสินค้า</h3>
+
+    <button id="camBtn" style="padding:10px 15px; background:#16a34a; color:white; border:none; border-radius:5px; cursor:pointer;">เปิดกล้อง</button>
+
+  </div>
 
 
-  <button id="camera">เปิดกล้อง</button>
-
-  <button id="stop" disabled>หยุดและบันทึก</button>
-
-  <button id="retry" disabled>ลองอัปโหลดอีกครั้ง</button>
+  <div id="status">กรุณากดปุ่ม "เปิดกล้อง" ด้านบนก่อนเริ่มใช้งาน</div>
 
 
-  <div id="status">กรุณาเปิดกล้องก่อนใช้งาน</div>
+  <div class="box">
 
-  <div id="order">ออเดอร์: -</div>
+    <div class="info">เลขพัสดุ: <span id="lblOrder" class="highlight">-</span></div>
+
+    <div class="info">วันที่เริ่ม: <span id="lblDate" class="highlight">-</span></div>
+
+    <div class="info">เวลาเริ่ม: <span id="lblTime" class="highlight">-</span></div>
+
+  </div>
 
 
   <video id="preview" autoplay playsinline muted></video>
 
 
-  <form id="scanForm">
+  <div class="box" style="margin-top:10px;">
 
-    <input
+    <label for="scan"><strong>คลิกช่องนี้แล้วใช้เครื่องสแกน QR / บาร์โค้ด:</strong></label>
 
-      id="scan"
+    <input id="scan" placeholder="สแกนเพื่อเริ่ม หรือสแกนซ้ำเพื่อปิดงาน..." autocomplete="off" disabled>
 
-      placeholder="คลิกช่องนี้ แล้วสแกน QR เลขออเดอร์"
-
-      autocomplete="off"
-
-      maxlength="80"
-
-      disabled
-
-    >
-
-  </form>
-
-
-  <a id="download" hidden>ดาวน์โหลดคลิปสำรอง</a>
-
-
-  <p>
-
-    สแกนเลขออเดอร์เพื่อเริ่ม และสแกนเลขเดิมเพื่อหยุด
-
-    ระบบจะหยุดอัตโนมัติเมื่อครบ 90 วินาที
-
-  </p>
+  </div>
 
 
   <script>
-
-    const MAX_MS = 90000;
-
-    const MAX_BYTES = 15 * 1024 * 1024;
-
 
     const params = new URLSearchParams(location.hash.slice(1));
 
@@ -166,684 +78,197 @@
     const token = params.get('token');
 
 
+    let stream = null, recorder = null, chunks = [], phase = 'idle', currentOrder = null, startTime = null;
+
+
     const $ = id => document.getElementById(id);
 
-    const show = text => $('status').textContent = text;
 
-
-    let stream = null;
-
-    let recorder = null;
-
-    let chunks = [];
-
-    let phase = 'idle';
-
-    let current = null;
-
-    let pending = null;
-
-    let stopTimer = null;
-
-    let uploadTimer = null;
-
-    let downloadUrl = null;
-
-
-    function bridgeAvailable() {
-
-      return Boolean(
-
-        window.opener &&
-
-        !window.opener.closed &&
-
-        token &&
-
-        parentOrigin &&
-
-        parentOrigin.startsWith('https://')
-
-      );
-
-    }
-
-
-    function send(message) {
-
-      if (!bridgeAvailable()) {
-
-        throw new Error(
-
-          'ไม่พบหน้าหลัก กรุณาดาวน์โหลดคลิปสำรอง ' +
-
-          'แล้วเปิดหน้ากล้องใหม่จาก Apps Script'
-
-        );
-
-      }
-
-
-      window.opener.postMessage(
-
-        { ...message, token },
-
-        parentOrigin
-
-      );
-
-    }
-
-
-    function cameraReady() {
-
-      return stream &&
-
-        stream.getVideoTracks().some(
-
-          track => track.readyState === 'live'
-
-        );
-
-    }
-
-
-    function refreshControls() {
-
-      $('camera').disabled =
-
-        phase !== 'idle' || cameraReady();
-
-
-      $('scan').disabled =
-
-        !cameraReady() ||
-
-        !['idle', 'recording'].includes(phase);
-
-
-      $('stop').disabled = phase !== 'recording';
-
-      $('retry').disabled = phase !== 'pending';
-
-    }
-
-
-    function selectMime() {
-
-      const candidates = [
-
-        'video/webm;codecs=vp8',
-
-        'video/webm',
-
-        'video/mp4'
-
-      ];
-
-
-      return candidates.find(
-
-        type => MediaRecorder.isTypeSupported(type)
-
-      );
-
-    }
-
-
-    $('camera').onclick = async () => {
+    $('camBtn').onclick = async () => {
 
       try {
 
-        if (!bridgeAvailable()) {
-
-          throw new Error(
-
-            'กรุณาเปิดหน้านี้จากปุ่มในระบบ Apps Script'
-
-          );
-
-        }
-
-
-        if (!navigator.mediaDevices || !window.MediaRecorder) {
-
-          throw new Error('เบราว์เซอร์นี้ไม่รองรับการบันทึก');
-
-        }
-
-
-        stream = await navigator.mediaDevices.getUserMedia({
-
-          video: {
-
-            width: { ideal: 1280 },
-
-            height: { ideal: 720 },
-
-            frameRate: { ideal: 15, max: 20 }
-
-          },
-
-          audio: false
-
-        });
-
+        stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false });
 
         $('preview').srcObject = stream;
 
         await $('preview').play();
 
-
-        stream.getVideoTracks()[0].addEventListener('ended', () => {
-
-          show('กล้องหยุดทำงาน กรุณาตรวจสอบการเชื่อมต่อ');
-
-
-          if (phase === 'recording') {
-
-            stopRecording();
-
-          }
-
-
-          refreshControls();
-
-        });
-
-
-        refreshControls();
-
-        show('พร้อมใช้งาน สแกนเลขออเดอร์เพื่อเริ่ม');
+        $('scan').disabled = false;
 
         $('scan').focus();
 
-      } catch (error) {
+        $('status').textContent = 'กล้องพร้อมแล้ว! สแกนบาร์โค้ด/QR เพื่อเริ่มบันทึก';
 
-        if (stream) {
+        $('camBtn').style.display = 'none';
 
-          stream.getTracks().forEach(track => track.stop());
+      } catch (e) {
 
-          stream = null;
-
-        }
-
-
-        refreshControls();
-
-        show('เปิดกล้องไม่ได้: ' + error.message);
+        alert('เปิดกล้องไม่ได้: ' + e.message);
 
       }
 
     };
 
 
-    $('scanForm').onsubmit = event => {
+    $('scan').oninput = (e) => {
 
-      event.preventDefault();
+      const val = $('scan').value.trim();
 
-
-      const order = $('scan').value.trim();
+      if (val.length < 3) return;
 
       $('scan').value = '';
 
 
-      if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$/.test(order)) {
+      if (phase === 'idle') {
 
-        show('QR ต้องเป็นรหัสออเดอร์ เช่น ORD-000123');
+        startRecord(val);
 
-        return;
+      } else if (phase === 'recording') {
 
-      }
+        if (val === currentOrder) {
 
-
-      if (phase === 'recording') {
-
-        // กัน Enter ซ้ำติดกันจากเครื่องสแกน
-
-        if (Date.now() - current.startedAt < 1500) return;
-
-
-        if (order === current.order) {
-
-          stopRecording();
+          stopRecord();
 
         } else {
 
-          show(
-
-            'กำลังอัดออเดอร์ ' + current.order +
-
-            ' กรุณาจบออเดอร์เดิมก่อน'
-
-          );
+          alert('กำลังบันทึกออเดอร์ ' + currentOrder + ' อยู่! กรุณาสแกนเลขเดิมเพื่อปิดงาน');
 
         }
-
-
-        return;
-
-      }
-
-
-      if (phase === 'idle') {
-
-        startRecording(order);
 
       }
 
     };
 
 
-    function startRecording(order) {
+    function startRecord(order) {
 
-      try {
+      currentOrder = order;
 
-        if (!cameraReady()) {
-
-          throw new Error('กล้องยังไม่พร้อม');
-
-        }
-
-
-        const mime = selectMime();
-
-
-        if (!mime) {
-
-          throw new Error('ไม่พบรูปแบบวิดีโอที่รองรับ');
-
-        }
-
-
-        recorder = new MediaRecorder(stream, {
-
-          mimeType: mime,
-
-          videoBitsPerSecond: 800000
-
-        });
-
-
-        chunks = [];
-
-
-        current = {
-
-          id: crypto.randomUUID(),
-
-          order,
-
-          startedAt: Date.now()
-
-        };
-
-
-        recorder.ondataavailable = event => {
-
-          if (event.data.size) chunks.push(event.data);
-
-        };
-
-
-        recorder.onstop = finishRecording;
-
-
-        recorder.onerror = () => {
-
-          show(
-
-            'เกิดข้อผิดพลาดระหว่างอัด ' +
-
-            'คลิปที่ได้อาจไม่ครบ กรุณาตรวจสอบ'
-
-          );
-
-
-          if (recorder.state !== 'inactive') {
-
-            stopRecording();
-
-          }
-
-        };
-
-
-        recorder.start(1000);
-
-        phase = 'recording';
-
-
-        $('download').hidden = true;
-
-        $('order').textContent = 'ออเดอร์: ' + order;
-
-
-        show(
-
-          'กำลังบันทึก: ' + order +
-
-          '\nสแกนเลขเดิมอีกครั้งเพื่อหยุด'
-
-        );
-
-
-        stopTimer = setTimeout(stopRecording, MAX_MS);
-
-
-        refreshControls();
-
-        $('scan').focus();
-
-      } catch (error) {
-
-        show('เริ่มบันทึกไม่ได้: ' + error.message);
-
-      }
-
-    }
-
-
-    function stopRecording() {
-
-      if (!recorder || recorder.state === 'inactive') return;
-
-
-      clearTimeout(stopTimer);
-
-      phase = 'processing';
-
-      show('กำลังเตรียมคลิป...');
-
-      refreshControls();
-
-
-      recorder.stop();
-
-    }
-
-
-    async function finishRecording() {
-
-      clearTimeout(stopTimer);
-
-
-      const mime = recorder.mimeType.split(';')[0];
-
-      const blob = new Blob(chunks, { type: mime });
+      startTime = new Date();
 
       chunks = [];
 
 
-      const extension = mime === 'video/mp4' ? 'mp4' : 'webm';
+      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp8') ? 'video/webm;codecs=vp8' : 'video/webm';
+
+      recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 1000000 });
 
 
-      if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+      recorder.ondataavailable = ev => { if (ev.data.size > 0) chunks.push(ev.data); };
 
-      downloadUrl = URL.createObjectURL(blob);
+      recorder.onstop = uploadRecord;
 
+      recorder.start(1000);
 
-      $('download').href = downloadUrl;
-
-      $('download').download =
-
-        current.order.replace(/[^A-Za-z0-9._-]/g, '_') +
-
-        '_' + current.id + '.' + extension;
+      phase = 'recording';
 
 
-      $('download').hidden = false;
+      $('lblOrder').textContent = order;
+
+      $('lblDate').textContent = startTime.toLocaleDateString('th-TH');
+
+      $('lblTime').textContent = startTime.toLocaleTimeString('th-TH');
+
+      $('status').textContent = '🔴 กำลังบันทึกวิดีโอ... (สแกนเลขเดิมอีกครั้งเพื่อปิดงาน)';
+
+    }
 
 
-      pending = {
+    function stopRecord() {
 
-        ...current,
+      if (recorder && recorder.state !== 'inactive') {
 
-        endedAt: Date.now(),
+        phase = 'processing';
 
-        mime,
+        $('status').textContent = '⏳ กำลังประมวลผลและบันทึกข้อมูล...';
 
-        blob
+        recorder.stop();
+
+      }
+
+    }
+
+
+    async function uploadRecord() {
+
+      const blob = new Blob(chunks, { type: recorder.mimeType.split(';')[0] });
+
+      const reader = new FileReader();
+
+      
+
+      reader.onload = () => {
+
+        const base64 = reader.result.split(',')[1];
+
+        const payload = {
+
+          id: crypto.randomUUID(),
+
+          order: currentOrder,
+
+          startedAt: startTime.getTime(),
+
+          endedAt: Date.now(),
+
+          mime: blob.type,
+
+          base64: base64
+
+        };
+
+
+        google.script.run
+
+          .withSuccessHandler(() => {
+
+            $('status').textContent = '✅ บันทึกออเดอร์ ' + currentOrder + ' สำเร็จ! พร้อมสแกนออเดอร์ถัดไป';
+
+            resetDisplay();
+
+            if (window.opener) {
+
+              window.opener.postMessage({ type: 'SAVED', order: currentOrder, token }, parentOrigin);
+
+            }
+
+          })
+
+          .withFailureHandler(err => {
+
+            $('status').textContent = '❌ บันทึกไม่สำเร็จ: ' + err.message;
+
+            phase = 'idle';
+
+            $('scan').focus();
+
+          })
+
+          .saveRecording(payload);
 
       };
 
-
-      if (!blob.size || blob.size > MAX_BYTES) {
-
-        phase = 'blocked';
-
-        refreshControls();
-
-
-        show(
-
-          'ไฟล์ว่างหรือเกิน 15 MB จึงไม่อัปโหลด\n' +
-
-          'ดาวน์โหลดคลิปสำรองก่อน แล้วเปิดหน้ากล้องใหม่'
-
-        );
-
-
-        return;
-
-      }
-
-
-      phase = 'pending';
-
-      refreshControls();
-
-      await upload();
+      reader.readAsDataURL(blob);
 
     }
 
 
-    function blobToBase64(blob) {
+    function resetDisplay() {
 
-      return new Promise((resolve, reject) => {
+      phase = 'idle';
 
-        const reader = new FileReader();
+      currentOrder = null;
 
+      $('lblOrder').textContent = '-';
 
-        reader.onload = () => {
+      $('lblDate').textContent = '-';
 
-          resolve(String(reader.result).split(',')[1]);
+      $('lblTime').textContent = '-';
 
-        };
-
-
-        reader.onerror = () => {
-
-          reject(new Error('อ่านไฟล์วิดีโอไม่สำเร็จ'));
-
-        };
-
-
-        reader.readAsDataURL(blob);
-
-      });
+      $('scan').focus();
 
     }
-
-
-    async function upload() {
-
-      if (!pending || phase !== 'pending') return;
-
-
-      phase = 'uploading';
-
-      refreshControls();
-
-      show('กำลังอัปโหลด ห้ามปิดหน้ากล้องและหน้าหลัก');
-
-
-      try {
-
-        const base64 = await blobToBase64(pending.blob);
-
-
-        send({
-
-          type: 'SAVE',
-
-          record: {
-
-            id: pending.id,
-
-            order: pending.order,
-
-            startedAt: pending.startedAt,
-
-            endedAt: pending.endedAt,
-
-            mime: pending.mime,
-
-            base64
-
-          }
-
-        });
-
-
-        clearTimeout(uploadTimer);
-
-
-        uploadTimer = setTimeout(() => {
-
-          if (phase !== 'uploading') return;
-
-
-          phase = 'pending';
-
-          refreshControls();
-
-
-          show(
-
-            'ยังไม่ได้รับผลยืนยัน อาจยังอัปโหลดอยู่\n' +
-
-            'รอสักครู่แล้วลองอีกครั้ง หรือดาวน์โหลดสำรอง'
-
-          );
-
-        }, 120000);
-
-      } catch (error) {
-
-        phase = 'pending';
-
-        refreshControls();
-
-        show('อัปโหลดไม่สำเร็จ: ' + error.message);
-
-      }
-
-    }
-
-
-    window.addEventListener('message', event => {
-
-      if (
-
-        event.source !== window.opener ||
-
-        event.origin !== parentOrigin ||
-
-        !event.data ||
-
-        event.data.token !== token ||
-
-        !pending ||
-
-        event.data.id !== pending.id
-
-      ) {
-
-        return;
-
-      }
-
-
-      const message = event.data;
-
-
-      if (message.type === 'SAVED') {
-
-        clearTimeout(uploadTimer);
-
-
-        const order = pending.order;
-
-        pending = null;
-
-        current = null;
-
-        phase = 'idle';
-
-
-        refreshControls();
-
-        show('บันทึกสำเร็จ: ' + order + '\nพร้อมสแกนออเดอร์ถัดไป');
-
-        $('scan').focus();
-
-      }
-
-
-      if (message.type === 'SAVE_ERROR') {
-
-        clearTimeout(uploadTimer);
-
-        phase = 'pending';
-
-
-        refreshControls();
-
-
-        show(
-
-          'บันทึกไม่สำเร็จ: ' + message.error +
-
-          '\nลองอัปโหลดอีกครั้ง หรือดาวน์โหลดคลิปสำรอง'
-
-        );
-
-      }
-
-    });
-
-
-    $('stop').onclick = stopRecording;
-
-    $('retry').onclick = upload;
-
-
-    window.addEventListener('beforeunload', event => {
-
-      if (phase !== 'idle') {
-
-        event.preventDefault();
-
-        event.returnValue = '';
-
-      }
-
-    });
-
-
-    try {
-
-      send({ type: 'READY' });
-
-    } catch (error) {
-
-      show(error.message);
-
-    }
-
-
-    refreshControls();
 
   </script>
 
