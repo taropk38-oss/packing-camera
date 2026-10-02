@@ -152,32 +152,34 @@
     }
 
 
-    // ดักจับข้อมูลที่ยิงเข้ามาจนจบชุดอัตโนมัติ (ไม่ต้องกด Enter)
-
     $('scan').oninput = (e) => {
 
       clearTimeout(scanTimer);
 
-      const val = $('scan').value.trim();
+      let rawVal = $('scan').value.trim();
 
       
 
-      // หน่วงเวลาสั้นๆ 150 มิลลิวินาที เพื่อรอให้เครื่องสแกนยิงตัวอักษรจนครบชุดเสร็จสมบูรณ์
-
       scanTimer = setTimeout(() => {
 
-        if (val.length < 5) return; // ถ้ารหัสสั้นเกินไปให้ข้าม
+        if (rawVal.length < 5) return;
+
+        
+
+        // ตัดเอาเฉพาะคำแรกสุด (ตัดช่องว่างหรือ Tab และข้อมูลส่วนเกินด้านหลังทิ้งทั้งหมดทันที)
+
+        let cleanOrder = rawVal.split(/[\s\t\n]+/)[0];
 
         $('scan').value = '';
 
 
         if (phase === 'idle') {
 
-          startRecord(val);
+          startRecord(cleanOrder);
 
         } else if (phase === 'recording') {
 
-          if (val === currentOrder) {
+          if (cleanOrder === currentOrder) {
 
             stopRecord();
 
