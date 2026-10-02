@@ -54,7 +54,9 @@
 
     #status { padding: 10px; background: #eff6ff; border-left: 4px solid #2563eb; margin-bottom: 10px; font-weight: bold; }
 
-    button { padding: 10px 20px; font-size: 16px; background: #16a34a; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    button { padding: 12px 24px; font-size: 16px; background: #16a34a; color: white; border: none; border-radius: 5px; cursor: pointer; z-index: 99; position: relative; }
+
+    button:active { background: #15803d; }
 
   </style>
 
@@ -66,12 +68,12 @@
 
     <h3 style="margin:0;">กล้องบันทึกการแพ็กสินค้า</h3>
 
-    <button id="camBtn">เปิดกล้อง</button>
+    <button id="camBtn" type="button">เปิดกล้อง</button>
 
   </div>
 
 
-  <div id="status">กรุณากดปุ่ม "เปิดกล้อง" ด้านบนก่อนเริ่มใช้งาน</div>
+  <div id="status">กรุณากดปุ่ม "เปิดกล้อง" ด้านบนเพื่อเริ่มใช้งาน</div>
 
 
   <div class="video-container">
@@ -114,31 +116,49 @@
     const $ = id => document.getElementById(id);
 
 
-    $('camBtn').onclick = async () => {
+    // แก้ปัญหาปุ่มเปิดกล้องกดไม่ติด ด้วยการผูก Event แบบสมบูรณ์
+
+    document.getElementById('camBtn').addEventListener('click', async () => {
 
       try {
 
-        stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false });
+        $('status').textContent = 'กำลังขออนุญาตเปิดกล้อง...';
 
-        $('preview').srcObject = stream;
+        stream = await navigator.mediaDevices.getUserMedia({ 
 
-        await $('preview').play();
+          video: { width: { ideal: 320 }, height: { ideal: 240 } }, 
+
+          audio: false 
+
+        });
+
+        
+
+        const videoEl = $('preview');
+
+        videoEl.srcObject = stream;
+
+        await videoEl.play();
+
+        
 
         $('scan').disabled = false;
 
         $('scan').focus();
 
-        $('status').textContent = 'กล้องพร้อมแล้ว! ยิงสแกนบาร์โค้ดพัสดุเพื่อเริ่มบันทึกทันที';
+        $('status').textContent = 'กล้องพร้อมแล้ว! ยิงสแกนบาร์โค้ดพัสดุเพื่อเริ่มบันทึกได้ทันที';
 
         $('camBtn').style.display = 'none';
 
       } catch (e) {
 
-        alert('เปิดกล้องไม่ได้: ' + e.message);
+        alert('ไม่สามารถเปิดกล้องได้:กิจกกรรมการใช้งานถูกบล็อก หรือไม่ได้อนุญาตสิทธิ์กล้อง (Error: ' + e.message + ')');
+
+        $('status').textContent = '❌ เปิดกล้องไม่สำเร็จ กรุณาตรวจสอบสิทธิ์การเข้าถึงกล้องของเบราว์เซอร์';
 
       }
 
-    };
+    });
 
 
     function updateClock() {
@@ -152,7 +172,7 @@
     }
 
 
-    // แม็ปปิ้งแป้นพิมพ์ไทย -> อังกฤษ แบบอัตโนมัติทันทีที่ยิงบาร์โค้ดเข้ามา
+    // ฟังก์ชันแปลงตัวอักษรไทยเป็นอังกฤษอัตโนมัติทันที
 
     const thToEnMap = {
 
@@ -173,30 +193,14 @@
     };
 
 
-    $('scan').addEventListener('keydown', (e) => {
+    function autoFixText(str) {
 
-      // ดักแปลงตัวอักษรไทยให้เป็นอังกฤษทันทีที่ป้อนเข้ามา
+      return str.split('').map(char => thToEnMap[char] || char).join('');
 
-      if (thToEnMap[e.key]) {
-
-        e.preventDefault();
-
-        const start = $('scan').selectionStart;
-
-        const end = $('scan').selectionEnd;
-
-        const val = $('scan').value;
-
-        $('scan').value = val.substring(0, start) + thToEnMap[e.key] + val.substring(end);
-
-        $('scan.setSelectionRange(start + 1, start + 1);
-
-      }
-
-    });
+    }
 
 
-    $('scan').oninput = (e) => {
+    $('scan').addEventListener('input', (e) => {
 
       clearTimeout(scanTimer);
 
@@ -206,17 +210,21 @@
 
       scanTimer = setTimeout(() => {
 
-        if (rawVal.length < 5) return;
+        if (!rawVal || rawVal.length < 3) return;
 
 
-        // ตัดเอาเฉพาะคำแรกสุด (ตัดช่องว่างและข้อมูลส่วนเกินด้านหลังทิ้ง)
+        // แปลงภาษาไทยเป็นอังกฤษ และตัดเอาเฉพาะคำแรกสุด (ตัดช่องว่างหรือ Enter ท้ายบาร์โค้ดออก)
 
-        let cleanOrder = rawVal.trim().split(/[\s\t\n]+/)[0];
+        let fixedStr = autoFixText(rawVal);
+
+        let cleanOrder = fixedStr.trim().split(/[\s\t\n]+/)[0];
+
+        
 
         $('scan').value = '';
 
 
-        if (!cleanOrder || cleanOrder.length < 5) return;
+        if (!cleanOrder || cleanOrder.length < 3) return;
 
 
         if (phase === 'idle') {
@@ -233,13 +241,15 @@
 
             alert('กำลังบันทึกพัสดุ ' + currentOrder + ' อยู่! กรุณาสแกนเลขเดิมซ้ำเพื่อปิดงาน');
 
+            $('scan').focus();
+
           }
 
         }
 
-      }, 150);
+      }, 100);
 
-    };
+    });
 
 
     function startRecord(order) {
@@ -320,13 +330,11 @@
         };
 
 
-        // ส่งข้อมูลไปบันทึกผ่าน Google Apps Script
-
         google.script.run
 
-          .withSuccessHandler((res) => {
+          .withSuccessHandler(() => {
 
-            $('status').textContent = '✅ บันทึกพัสดุ ' + currentOrder + ' ลง Google Sheets สำเร็จเรียบร้อย!';
+            $('status').textContent = '✅ บันทึกพัสดุ ' + currentOrder + ' ลง Google Sheets สำเร็จ!';
 
             resetDisplay();
 
@@ -378,7 +386,5 @@
   </script>
 
 </body>
-
-</html>
 
 </html>
